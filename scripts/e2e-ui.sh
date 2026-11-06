@@ -1,0 +1,116 @@
+#!/bin/sh
+# UI-side end-to-end checks: a browser (ego-browser) plays the person in DSH Desktop against the
+# isolated `dsh web`, and hc plays the Herdr agent. Run scripts/dev.sh up first.
+# Covers: Desktop-origin sessions mirrored on first run, /herdr, approvals and questions answered
+# from either side (the other side's prompt is withdrawn), and a Herdr agent taking a session over.
+set -u
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+eval "$("$ROOT/scripts/dev.sh" env)"
+ISO=${DSH_BRIDGE_ISO:-/tmp/dsh-iso}
+URL=$(grep -o 'http://127.0.0.1:[0-9]*/?token=[A-Za-z0-9_-]*' "$ISO/web.log" | tail -1)
+[ -n "$URL" ] || { echo "no dsh web URL in $ISO/web.log; run scripts/dev.sh up"; exit 1; }
+FAILED=0
+
+# ego-browser prints console output on stderr; results are the lines marked RESULT:.
+result() { sed -n 's/^RESULT://p' | tail -1; }
+check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2', want '$3'"; FAILED=1; fi; }
+state() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;s=json.load(sys.stdin).get("status") or {};print(s.get("state",""))'; }
+dsh_names() { hc ls --json | python3 -I -c 'import json,sys;[print(t.get("name") or "") for t in json.load(sys.stdin)["terminals"] if t.get("agent")=="dsh"]' | sort; }
+
+# ui <javascript>: run in the browser task space with `page`, `send(text)`, and `text()` defined.
+ui() {
+  ego-browser nodejs <<EOF
+const task = await taskSpace("dsh-herdr-bridge UI tests");
+const COMPOSER = "loc=role:textbox[name*='commands, @ files']";
+const page = task.page("p1");
+if (!(await page.url()).startsWith("${URL%%\?*}")) {
+  await page.goto("$URL", { timeout: 30000 });
+  await page.waitForSelector(COMPOSER, { timeout: 30000 });
+}
+const notice = await page.evaluate(() => [...document.querySelectorAll("button")].some(b => b.innerText.trim() === "Continue"));
+if (notice) await page.click("loc=role:button[name='Continue']", { label: "dismiss notice" });
+const text = () => page.evaluate(() => document.body.innerText);
+async function send(t) {
+  await page.click(COMPOSER, { label: "focus composer" });
+  await page.keyboard.type(t);
+  await page.click("loc=css:button[aria-label=\"Send message\"]", { label: "send" });
+}
+$1
+EOF
+}
+
+# 1. A session started in Desktop is mirrored on its first run as dsh-<short id>.
+BEFORE=$(dsh_names)
+ui '
+await page.keyboard.press("Alt+Meta+n");
+await page.waitForTimeout(1000);
+await send("started in the UI [[e2e]]");
+await page.waitForFunction(() => document.body.innerText.includes("MOCK-REPLY: started in the UI"), undefined, { timeout: 30000 });
+' >/dev/null
+sleep 1
+printf '%s\n' "$BEFORE" > "$ISO/names.before"
+NEW=$(dsh_names | grep -vxF -f "$ISO/names.before" | head -1)
+check "a Desktop session is mirrored as dsh-<short id>" "$(printf %s "$NEW" | cut -c1-4)" dsh-
+check "and reports its finished turn" "$(state "$NEW")" done
+
+# 2. /herdr prints the session's hc address.
+OUT=$(ui '
+await page.click(COMPOSER, { label: "focus composer" });
+await page.keyboard.type("/herdr");
+await page.waitForTimeout(600);
+await page.keyboard.press("Enter");
+await page.waitForTimeout(600);
+if ((await page.evaluate(() => document.querySelector("[role=textbox]")?.innerText ?? "")).includes("/herdr")) await page.keyboard.press("Enter");
+await page.waitForFunction(() => document.body.innerText.includes("In Herdr as"), undefined, { timeout: 15000 });
+console.log("RESULT:" + (await text()).split("\n").filter(l => l.includes("In Herdr as")).pop());
+' 2>&1 | result)
+case "$OUT" in *"($NEW)"*) check "/herdr prints the hc address" yes yes ;; *) check "/herdr prints the hc address" "$OUT" "…($NEW)…" ;; esac
+
+# 3. An approval raised in Desktop, answered from hc: the Desktop dialog is withdrawn.
+rm -f /private/var/tmp/dsh-bridge-approval-probe
+ui '
+await send("approval answered from hc [[approve]]");
+await page.waitForSelector("loc=role:button[name=\"Allow once\"]", { timeout: 30000 });
+' >/dev/null
+check "Desktop approval shows as blocked in hc" "$(state "$NEW")" blocked
+hc send --force --wait --timeout 60 "$NEW" y >/dev/null
+GONE=$(ui '
+await page.waitForFunction(() => document.body.innerText.includes("approval flow finished"), undefined, { timeout: 30000 });
+console.log("RESULT:" + await page.evaluate(() => ![...document.querySelectorAll("button")].some(b => /^(Allow once|Reject)$/.test(b.innerText.trim()))));
+' 2>&1 | result)
+check "answering in hc withdraws the Desktop dialog" "$GONE" true
+check "and the approved command ran" "$([ -e /private/var/tmp/dsh-bridge-approval-probe ] && echo ran)" ran
+rm -f /private/var/tmp/dsh-bridge-approval-probe
+
+# 4. The same, answered in Desktop: hc sees it settle.
+ui '
+await send("approval answered in Desktop [[approve]]");
+await page.waitForSelector("loc=role:button[name=\"Reject\"]", { timeout: 30000 });
+await page.click("loc=role:button[name=\"Reject\"]", { label: "reject in Desktop" });
+' >/dev/null
+hc wait "$NEW" --timeout 60 >/dev/null
+if hc read "$NEW" --lines 30 | grep -q "answered in DSH Desktop"; then check "answering in Desktop settles the hc prompt" yes yes; else check "answering in Desktop settles the hc prompt" no yes; fi
+check "and the rejected command did not run" "$([ -e /private/var/tmp/dsh-bridge-approval-probe ] && echo ran || echo no)" no
+
+# 5. A question raised in Desktop, answered from hc: the Desktop question is withdrawn.
+ui '
+await send("question answered from hc [[question]]");
+await page.waitForFunction(() => document.body.innerText.includes("Pick a color"), undefined, { timeout: 30000 });
+' >/dev/null
+check "Desktop question shows as blocked in hc" "$(state "$NEW")" blocked
+hc send --force --wait --timeout 60 "$NEW" 2 >/dev/null
+GONE=$(ui '
+await page.waitForFunction(() => document.body.innerText.includes("answer was"), undefined, { timeout: 30000 });
+console.log("RESULT:" + await page.evaluate(() => ![...document.querySelectorAll("button,[role=radio],[role=option]")].some(e => /^(red|blue)$/i.test(e.innerText.trim()) && e.offsetParent !== null)));
+' 2>&1 | result)
+check "answering in hc withdraws the Desktop question" "$GONE" true
+
+# 6. A Herdr agent takes the session over: the automatic mirror makes way.
+SHORT=$(printf %s "$NEW" | sed 's/^dsh-//')
+hc run --bg --name "ui-taker-$SHORT" dsh-hc attach "$SHORT" >/dev/null; sleep 2
+check "takeover closes the automatic mirror" "$(hc get "$NEW" --json >/dev/null 2>&1 && echo still-there || echo gone)" gone
+check "and the taker reports the session" "$(state "ui-taker-$SHORT")" done
+hc kill "ui-taker-$SHORT" >/dev/null 2>&1; hc rm "ui-taker-$SHORT" >/dev/null 2>&1
+
+[ $FAILED = 0 ] && echo "all passed" || echo "some checks failed"
+exit $FAILED

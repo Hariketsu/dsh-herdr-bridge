@@ -1,0 +1,121 @@
+#!/bin/sh
+# End-to-end checks against the isolated dev environment (scripts/dev.sh up first).
+# Drives DSH only through hc and dsh-hc, the way a Herdr agent would; the mock LLM scripts the
+# replies. UI-side checks (Desktop-origin sessions, Desktop answering, /herdr) are in e2e-ui.sh.
+set -u
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+eval "$("$ROOT/scripts/dev.sh" env)"
+WORK=${DSH_BRIDGE_ISO:-/tmp/dsh-iso}/e2e-proj
+mkdir -p "$WORK/sub" && cd "$WORK" || exit 1
+RUN=$(date +%s)
+FAILED=0
+
+state() { field "$1" state; }
+field() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;s=json.load(sys.stdin).get("status") or {};print(s.get(sys.argv[1],""))' "$2"; }
+address() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["address"])'; }
+label() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;print(json.load(sys.stdin).get("labels",{}).get(sys.argv[1],""))' "$2"; }
+# Live terminals reporting as DSH (`hc ls --json` has no labels, but shows the reporting app as agent).
+dsh_terminals() { hc ls --json | python3 -I -c 'import json,sys;[print(t["address"]) for t in json.load(sys.stdin)["terminals"] if t.get("agent")=="dsh"]'; }
+check() { # check <label> <actual> <expected>
+  if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2', want '$3'"; FAILED=1; fi
+}
+contains() { # contains <label> <terminal> <text>
+  if hc read "$2" --lines 300 2>/dev/null | grep -qF -- "$3"; then echo "ok   $1"; else echo "FAIL $1: '$3' not on screen"; FAILED=1; fi
+}
+
+T=e2e-$RUN
+hc run --bg --name "$T" dsh "hello [[e2e]]" >/dev/null
+hc wait "$T" --timeout 60 >/dev/null
+check "hc-origin session finishes its first task" "$(state "$T")" done
+contains "transcript shows the reply" "$T" "MOCK-REPLY: hello [[e2e]]"
+check "terminal title follows the DSH session title" "$(field "$T" title)" "Mock title"
+check "dsh.title label follows the session title" "$(label "$T" dsh.title)" "Mock title"
+SID=$(label "$T" dsh.session)
+check "dsh.session label is set" "$(printf %s "$SID" | cut -c1-8)" session-
+
+hc send --wait --timeout 60 "$T" "second [[e2e]]" >/dev/null
+check "send --wait runs a second turn" "$(state "$T")" done
+contains "second reply on screen" "$T" "MOCK-REPLY: second [[e2e]]"
+
+hc send "$T" "slow [[slow]]" >/dev/null; sleep 1
+check "slow turn is working" "$(state "$T")" working
+hc interrupt "$T" >/dev/null
+check "interrupt returns to idle" "$(state "$T")" idle
+contains "cancel is shown" "$T" "✻ cancelled"
+
+hc send --wait --timeout 60 "$T" "boom [[fail]]" >/dev/null
+check "model failure reports error" "$(state "$T")" error
+contains "error is shown" "$T" "✻ error"
+
+A=e2e-a-$RUN
+hc run --bg --name "$A" dsh "needs approval [[approve]]" >/dev/null
+hc wait "$A" --timeout 60 >/dev/null
+check "approval request reports blocked" "$(state "$A")" blocked
+if hc send "$A" "y" >/dev/null 2>&1; then check "hc refuses plain send while blocked" sent refused; else check "hc refuses plain send while blocked" refused refused; fi
+hc send --force --wait --timeout 60 "$A" "y" >/dev/null
+check "approval answered from hc (--force y)" "$(state "$A")" done
+contains "approved command ran to the end" "$A" "approval flow finished"
+rm -f /private/var/tmp/dsh-bridge-approval-probe
+
+B=e2e-b-$RUN
+hc run --bg --name "$B" dsh "needs approval again [[approve]]" >/dev/null
+hc wait "$B" --timeout 60 >/dev/null
+hc interrupt "$B" >/dev/null
+check "interrupt while blocked returns to idle" "$(state "$B")" idle
+
+Q=e2e-q-$RUN
+hc run --bg --name "$Q" dsh "ask [[question]]" >/dev/null
+hc wait "$Q" --timeout 60 >/dev/null
+check "question reports blocked(question)" "$(state "$Q"):$(field "$Q" kind)" blocked:question
+hc send --force --wait --timeout 60 "$Q" "2" >/dev/null
+contains "question answered from hc by option number" "$Q" '"selected":["blue"]'
+
+E=e2e-e-$RUN
+hc run --bg --name "$E" dsh "env [[env]]" >/dev/null
+hc wait "$E" --timeout 60 >/dev/null
+contains "the session's shell gets DSH_HC_TERMINAL = its hc address" "$E" "DSH_HC_TERMINAL=$(address "$E")"
+contains "tool calls show their description and result" "$E" "⏺ bash show hc address"
+if grep -q '"bridge_skill": true' "${DSH_BRIDGE_ISO:-/tmp/dsh-iso}/mock.log"; then check "herdr-bridge skill reaches the model" yes yes; else check "herdr-bridge skill reaches the model" no yes; fi
+
+# Discovery and takeover: dsh-hc ls finds the session; attach replays its conversation.
+SHORT=$(printf %s "$SID" | sed 's/^session-//' | cut -c1-8)
+if dsh-hc ls --days 1 | grep -q "^$SHORT"; then check "dsh-hc ls lists recent sessions" yes yes; else check "dsh-hc ls lists recent sessions" no yes; fi
+V=e2e-v-$RUN
+hc run --bg --name "$V" dsh-hc attach "$SHORT" >/dev/null; sleep 2
+contains "attach replays the earlier conversation" "$V" "MOCK-REPLY: second [[e2e]]"
+check "attached terminal reports the session status" "$(state "$V")" error
+hc send --wait --timeout 60 "$V" "from the attached terminal [[e2e]]" >/dev/null
+contains "a prompt from one terminal shows in the other" "$T" "MOCK-REPLY: from the attached terminal [[e2e]]"
+
+# A subfolder of a Workspace becomes an ungrouped session in that folder, not a new Workspace.
+S=e2e-s-$RUN
+(cd "$WORK/sub" && hc run --bg --name "$S" dsh "in a subfolder [[e2e]]" >/dev/null)
+hc wait "$S" --timeout 60 >/dev/null
+SSID=$(label "$S" dsh.session)
+SCWD=$(dsh-hc ls --days 1 --json | python3 -I -c 'import json,sys;print(next((i["cwd"] for i in json.load(sys.stdin) if i["sessionId"]==sys.argv[1]),""))' "$SSID")
+check "a subfolder session keeps its folder" "$(basename "$SCWD")" sub
+
+# A reload drops the plugin's connections; the terminal stays, reconnects, and keeps its address.
+R=e2e-r-$RUN
+hc run --bg --name "$R" dsh "running across a reload [[slow:12]]" >/dev/null; sleep 1
+BEFORE=$(address "$R")
+"$ROOT/scripts/dev.sh" reload; sleep 5
+check "a terminal survives a plugin reload with the same address" "$(address "$R"):$(hc get "$R" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["state"])')" "$BEFORE:live"
+check "it still reports the running turn" "$(state "$R")" working
+hc wait "$R" --timeout 60 >/dev/null
+check "and the turn finishes" "$(state "$R")" done
+contains "the reconnect is visible" "$R" "⋯ reconnected"
+
+# Perch, unmodified, shows the mirrored session.
+PERCHCTL=$ROOT/ref/herdr-perch/.build/release/perchctl
+if [ -x "$PERCHCTL" ]; then
+  ROWS=$("$PERCHCTL" dump --core-root "$XDG_STATE_HOME/herdr-core" 2>/dev/null | python3 -I -c 'import json,sys;print(sum(1 for r in json.load(sys.stdin)["rows"] if r.get("backend")=="core" and r.get("pane")==sys.argv[1]))' "$(address "$T")")
+  check "Perch shows the mirrored session" "$ROWS" 1
+else
+  echo "skip Perch check (build it: cd ref/herdr-perch && swift build --product perchctl -c release)"
+fi
+
+for t in "$T" "$A" "$B" "$Q" "$E" "$V" "$S" "$R"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
+for t in $(dsh_terminals); do hc kill "$t" >/dev/null 2>&1; done
+[ $FAILED = 0 ] && echo "all passed" || echo "some checks failed"
+exit $FAILED
