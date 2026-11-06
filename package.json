@@ -1,0 +1,26 @@
+{
+  "name": "dsh-herdr-bridge",
+  "version": "0.0.1",
+  "description": "Make DeepSeek Harness Desktop sessions ordinary Herdr Core terminals",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "render.js",
+    "proxy.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.9"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}
