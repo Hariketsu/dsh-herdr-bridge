@@ -15,6 +15,18 @@ import { Renderer, crlf, oneLine, osc, style, windowTitle } from './render.js'
 
 export const name = 'herdr-bridge'
 
+// Settings DSH validates and edits. Schemastery ships with DSH but may not resolve from a linked
+// checkout; without it the settings still work from cordis.patch.yml, just unvalidated and not live.
+// The volatile fields are what the Plugins page form (client.js) edits; they apply without a reload.
+const Schema = await import('@deepseek-ai/schemastery').then(m => m.default, () => null)
+export const Config = Schema?.object({
+  herdrPlacement: Schema.union(['folder', 'dsh', 'none']).default('folder').volatile()
+    .description('Where Herdr App shows the terminals of sessions started in DSH: by folder, in one space, or not at all'),
+  herdrSpace: Schema.string().volatile().description('A fixed Herdr App space id; overrides herdrPlacement when set'),
+  reconnectGraceSeconds: Schema.natural().default(30).description('How long a terminal waits for the plugin to come back before it exits'),
+  hc: Schema.string().description('The hc executable (default: hc on PATH)'),
+})
+
 const PROTOCOL = 1
 const PASTE_START = '\x1b[200~'
 const PASTE_END = '\x1b[201~'
@@ -101,7 +113,10 @@ This DSH session is mirrored into Herdr Core (hc) as an ordinary terminal, so yo
 
 export function apply(ctx, config = {}) {
   const hc = config.hc || 'hc'
-  const herdrSpace = config.herdrSpace || ''
+  // Volatile settings are references read at each use; a linked checkout passes plain values.
+  const live = value => typeof value?.get === 'function' ? value.get() : value
+  const herdrSpace = () => live(config.herdrSpace) || ''
+  const herdrPlacement = () => live(config.herdrPlacement) || 'folder'
   const grace = Number(config.reconnectGraceSeconds ?? 30)
   const home = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'herdr-bridge')
   mkdirSync(home, { recursive: true })
@@ -131,6 +146,30 @@ export function apply(ctx, config = {}) {
     if (error) log('hc', args[0], 'failed:', oneLine(stderr || error.message, 300))
     done?.(error, stdout)
   })
+  const hcJson = args => new Promise(resolve => runHc([...args, '--json'], (error, stdout) => {
+    try { resolve(error ? null : JSON.parse(stdout)) } catch { resolve(null) }
+  }))
+
+  /**
+   * The Herdr App space for a session started in DSH (`herdr.space` label; Herdr App only shows
+   * hc terminals that carry one, and makes a new space for an id it doesn't know).
+   * By folder: the space a live terminal in the same folder is already in (the person's own space
+   * first), else one per folder. `dsh`: one space for every session. `none`: not placed.
+   */
+  async function herdrSpaceFor(cwd) {
+    if (herdrSpace()) return herdrSpace()
+    if (herdrPlacement() === 'none') return ''
+    if (herdrPlacement() === 'dsh') return 'dsh'
+    const here = realpath(cwd || homedir())
+    const spaces = []
+    for (const t of (await hcJson(['ls']))?.terminals ?? []) {
+      if (!t.cwd || realpath(t.cwd) !== here) continue
+      const space = (await hcJson(['get', t.address]))?.labels?.['herdr.space']
+      if (space) spaces.push(space)
+    }
+    return spaces.find(s => !s.startsWith('dsh-')) ?? spaces[0]
+      ?? `dsh-${createHash('sha1').update(here).digest('hex').slice(0, 12)}`
+  }
 
   /** Host session services, present only in hosts that have them (Desktop, `dsh web`). */
   let sessions = null
@@ -222,6 +261,7 @@ export function apply(ctx, config = {}) {
         const changed = this.terminal !== hello.term
         this.terminal = hello.term
         if (changed) runHc(['label', this.terminal, `dsh.session=${this.sessionId}`, `dsh.title=${this.title}`])
+        if (hello.auto || origin === 'desktop') this.place(hello.term)
       }
       if (hello.cols) this.renderer.cols = hello.cols
       socket.on('close', () => this.conns.delete(socket))
@@ -291,16 +331,24 @@ export function apply(ctx, config = {}) {
     }
 
     /** Mirror into hc: a terminal named dsh-<short id> running `dsh-hc attach`. */
-    launch() {
+    async launch() {
       if (this.mirrored) return
       this.launching = true
       const args = ['run', '--bg', '--rm', '--no-parent', '--json', '--name', `dsh-${this.short}`,
         '--label', `dsh.session=${this.sessionId}`, '--label', `dsh.title=${this.title}`]
-      if (herdrSpace) args.push('--label', `herdr.space=${herdrSpace}`)
+      const space = await herdrSpaceFor(this.cwd)
+      if (space) args.push('--label', `herdr.space=${space}`)
       if (this.cwd) args.push('--cwd', this.cwd)
       args.push('--', launcher, 'attach', '--session', this.sessionId, '--auto')
       // A failure is usually the name being taken: that terminal is still ours and reconnecting.
       runHc(args, error => { if (error) this.launching = false })
+    }
+
+    /** Put an automatic mirror into a Herdr App space, unless it is in one already (placed by us before, or moved by the person). */
+    async place(term) {
+      if ((await hcJson(['get', term]))?.labels?.['herdr.space']) return
+      const space = await herdrSpaceFor(this.cwd)
+      if (space) runHc(['label', term, `herdr.space=${space}`])
     }
 
     /** Close every terminal mirroring this session; `except` keeps one. */
@@ -545,6 +593,9 @@ export function apply(ctx, config = {}) {
   })
 
   // /herdr: mirror this session into Herdr now and show its hc address.
+  // The Plugins page shows this plugin's own settings page (client.js), not a generated one.
+  ctx.inject(['settings'], c => { c.effect(() => c.settings.configure({ auto: false }, ctx.fiber), 'herdr-bridge: own settings page') })
+
   ctx.inject(['commands'], c => {
     c.commands.register({
       name: 'herdr',
@@ -600,5 +651,5 @@ export function apply(ctx, config = {}) {
     }
     bridges.clear()
   }, 'herdr-bridge: drop connections')
-  log('loaded')
+  log('loaded', Schema ? '(settings schema on)' : '(settings schema off: schemastery not found)', `herdrPlacement=${herdrPlacement()}`)
 }

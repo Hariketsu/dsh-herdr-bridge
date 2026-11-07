@@ -52,6 +52,8 @@ printf '%s\n' "$BEFORE" > "$ISO/names.before"
 NEW=$(dsh_names | grep -vxF -f "$ISO/names.before" | head -1)
 check "a Desktop session is mirrored as dsh-<short id>" "$(printf %s "$NEW" | cut -c1-4)" dsh-
 check "and reports its finished turn" "$(state "$NEW")" done
+SPACE=$(hc get "$NEW" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin).get("labels",{}).get("herdr.space",""))')
+check "and is placed in a Herdr App space by folder" "$(printf %s "$SPACE" | cut -c1-4)" dsh-
 
 # 2. /herdr prints the session's hc address.
 OUT=$(ui '
