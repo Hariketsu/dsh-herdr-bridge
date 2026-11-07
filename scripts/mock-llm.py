@@ -34,7 +34,7 @@ def latest_prompt(body):
     return ""
 
 
-APPROVAL_COMMAND = "touch /private/var/tmp/dsh-bridge-approval-probe"
+APPROVAL_COMMAND = "touch /var/tmp/dsh-bridge-approval-probe"
 
 
 def pending_tool_use(body):

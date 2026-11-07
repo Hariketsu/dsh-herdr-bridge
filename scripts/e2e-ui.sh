@@ -67,7 +67,7 @@ console.log("RESULT:" + (await text()).split("\n").filter(l => l.includes("In He
 case "$OUT" in *"($NEW)"*) check "/herdr prints the hc address" yes yes ;; *) check "/herdr prints the hc address" "$OUT" "…($NEW)…" ;; esac
 
 # 3. An approval raised in Desktop, answered from hc: the Desktop dialog is withdrawn.
-rm -f /private/var/tmp/dsh-bridge-approval-probe
+rm -f /var/tmp/dsh-bridge-approval-probe
 ui '
 await send("approval answered from hc [[approve]]");
 await page.waitForSelector("loc=role:button[name=\"Allow once\"]", { timeout: 30000 });
@@ -79,8 +79,8 @@ await page.waitForFunction(() => document.body.innerText.includes("approval flow
 console.log("RESULT:" + await page.evaluate(() => ![...document.querySelectorAll("button")].some(b => /^(Allow once|Reject)$/.test(b.innerText.trim()))));
 ' 2>&1 | result)
 check "answering in hc withdraws the Desktop dialog" "$GONE" true
-check "and the approved command ran" "$([ -e /private/var/tmp/dsh-bridge-approval-probe ] && echo ran)" ran
-rm -f /private/var/tmp/dsh-bridge-approval-probe
+check "and the approved command ran" "$([ -e /var/tmp/dsh-bridge-approval-probe ] && echo ran)" ran
+rm -f /var/tmp/dsh-bridge-approval-probe
 
 # 4. The same, answered in Desktop: hc sees it settle.
 ui '
@@ -90,7 +90,7 @@ await page.click("loc=role:button[name=\"Reject\"]", { label: "reject in Desktop
 ' >/dev/null
 hc wait "$NEW" --timeout 60 >/dev/null
 if hc read "$NEW" --lines 30 | grep -q "answered in DSH Desktop"; then check "answering in Desktop settles the hc prompt" yes yes; else check "answering in Desktop settles the hc prompt" no yes; fi
-check "and the rejected command did not run" "$([ -e /private/var/tmp/dsh-bridge-approval-probe ] && echo ran || echo no)" no
+check "and the rejected command did not run" "$([ -e /var/tmp/dsh-bridge-approval-probe ] && echo ran || echo no)" no
 
 # 5. A question raised in Desktop, answered from hc: the Desktop question is withdrawn.
 ui '

@@ -55,7 +55,7 @@ if hc send "$A" "y" >/dev/null 2>&1; then check "hc refuses plain send while blo
 hc send --force --wait --timeout 60 "$A" "y" >/dev/null
 check "approval answered from hc (--force y)" "$(state "$A")" done
 contains "approved command ran to the end" "$A" "approval flow finished"
-rm -f /private/var/tmp/dsh-bridge-approval-probe
+rm -f /var/tmp/dsh-bridge-approval-probe
 
 B=e2e-b-$RUN
 hc run --bg --name "$B" dsh "needs approval again [[approve]]" >/dev/null
