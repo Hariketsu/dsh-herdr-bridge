@@ -2,3 +2,5 @@ ref/
 node_modules/
 handoff/
 __pycache__/
+AGENTS.local.md
+.DS_Store

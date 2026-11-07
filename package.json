@@ -1,7 +1,7 @@
 {
   "name": "dsh-herdr-bridge",
   "version": "0.0.1",
-  "description": "Make DeepSeek Harness Desktop sessions ordinary Herdr Core terminals",
+  "description": "Bridge DeepSeek Harness (DSH) sessions into Herdr Core as hc terminals",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -22,5 +22,17 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hariketsu/dsh-herdr-bridge.git"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "herdr",
+    "herdr-core",
+    "hc",
+    "agent"
+  ]
 }
