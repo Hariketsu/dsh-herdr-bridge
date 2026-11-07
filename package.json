@@ -1,6 +1,6 @@
 {
   "name": "dsh-herdr-bridge",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Bridge DeepSeek Harness (DSH) sessions into Herdr Core as hc terminals",
   "type": "module",
   "main": "index.js",
