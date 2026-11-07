@@ -4,7 +4,7 @@
 
 ## P0：公开发布前
 
-- [ ] **发布到 npm**：README 的安装步骤假设包已经在 npm 上。
+- [ ] **发布 0.1.1**：npm 上是 0.1.0，还不含终端标题、首段回复和 Herdr App 图标这几项修复。
 - [ ] **英文 README**：英文版作为默认的 `README.md`，现有中文版改名为 `README.zh-CN.md`，两者互相链接。配图已经是英文演示。
 - [ ] **从 npm 安装到真实 Desktop**：`npm pack` 出的包已在隔离的 `dsh web` 里装过、卸过：插件能加载，`dsh-hc ls`、`install-template` 正常，卸载后 bundle 条目被移除，DSH 启动没有警告。发布后还要在 Desktop profile 上按 README 走一遍，包括发一条消息后 `hc ls` 出现 `dsh-<短 id>`。
 - [ ] **Desktop 和 `dsh web` 同时运行**：后启动的那个不提供控制 socket（`index.js` 里的 probe），但它的插件可能仍然会为自己的会话开终端，这些终端会连到另一个 Host。先实测会发生什么；至少保证不出现连错 Host 的终端，然后把 README 里这条限制写准确。
@@ -20,8 +20,7 @@
 - [ ] **会话归档或删除时终端是否随之结束**：只覆盖了 Agent 释放这条路径。
 - [ ] **长时间运行的稳定性**：场景是一天几十个会话、Desktop 睡眠唤醒、hc core 重启。通过标准：每个场景之后，`hc ls` 里的 `dsh-*` 终端和 Desktop 里在运行的会话一一对应，没有残留的代理进程和过期的 socket，`bridge.log` 里没有未处理的错误。
 - [ ] **Windows / Linux**：启动器（`.cmd`）、命名管道、hc 在 Windows 上如何运行 `.cmd` 都没有测过。至少在 Linux 上跑通 `e2e.sh`。
-
-- [ ] **向 Herdr App 提 issue：第三方集成提供自己的程序条目**：现在只能合并进用户自己的 `programs.json`（`install-template` 就是这么做的），既脆弱也不好卸载。提议用 `programs.d/` 这样的分层片段；顺带讨论 GUI Agent 上报状态不需要 PTY 进程，以及“已查看”信号。草稿待用户审阅后再提交，参考已有的 herdrdev/herdr-app#330、#651。
+- [ ] **跟进 herdrdev/herdr-app#693**（第三方集成提供自己的程序条目，例如 `programs.d/`）：维护者同意的话，`install-template` 改成写自己的片段文件，不再合并用户的 `programs.json`。
 
 ## P2：可选改进
 
