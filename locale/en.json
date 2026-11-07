@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Herdr Bridge",
+    "description": "Brings DSH sessions into Herdr: see them in Herdr App, drive them from Herdr agents, and answer approvals on either side.",
+    "detail": "docs/DETAIL.md"
+  }
+}

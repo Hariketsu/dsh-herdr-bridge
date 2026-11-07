@@ -6,7 +6,8 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./client": "./client.js"
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "index.js",
@@ -15,7 +16,10 @@
     "proxy.js",
     "assets/dsh.svg",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "locale/*.json",
+    "docs/DETAIL.md",
+    "docs/DETAIL.zh.md"
   ],
   "engines": {
     "node": ">=24.9"
