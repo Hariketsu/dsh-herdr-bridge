@@ -1,0 +1,34 @@
+# Publish to npm when a GitHub release is published (tag vX.Y.Z matching package.json).
+# Uses npm trusted publishing (OIDC): no npm token is stored anywhere. Configure it once on
+# npmjs.com → dsh-herdr-bridge → Settings → Trusted publishing → GitHub Actions:
+#   user Hariketsu, repository dsh-herdr-bridge, workflow release.yml, allow `npm publish`.
+# Provenance is attached automatically (public repo, public package).
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token npm trusts instead of a stored secret
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Tag matches package.json
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          [ "${GITHUB_REF_NAME}" = "v${version}" ] || { echo "release tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+      # The end-to-end suites need DSH, hc and a desktop; run them locally before tagging.
+      - name: Syntax check
+        run: for f in index.js render.js proxy.js; do node --check "$f"; done
+      - name: npm 11.5.1+ (trusted publishing)
+        run: npm install -g npm@^11.5.1
+      - run: npm publish --access public
