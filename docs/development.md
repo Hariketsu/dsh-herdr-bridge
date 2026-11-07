@@ -9,6 +9,17 @@ dsh plugin --profile desktop add ~/dsh-herdr-bridge   # 先完全退出 Desktop�
 
 这是链接安装：DSH 直接运行这个目录里的代码，所以目录要长期保留。之后改代码不用再退出 Desktop，执行 `scripts/desktop.sh reload` 热重载即可。
 
+链接安装解析不到 DSH 自带的 `@deepseek-ai/schemastery`，所以插件不导出 `Config`：插件页上没有设置表单，设置要写在 `cordis.patch.yml` 里，且改了要重载才生效。要在真实 Desktop 上测和 npm 一样的安装（设置页、插件页文案），打包后安装：
+
+```sh
+npm pack --pack-destination /tmp && mv /tmp/dsh-herdr-bridge-<版本>.tgz /tmp/dsh-herdr-bridge-test-<n>.tgz
+# 完全退出 Desktop 后：
+dsh plugin --profile desktop remove dsh-herdr-bridge
+dsh plugin --profile desktop add /tmp/dsh-herdr-bridge-test-<n>.tgz
+```
+
+每次换一个文件名，并且先卸再装：同名同版本的包重装，插件页可能还是旧内容。
+
 ## 隔离开发环境
 
 ```sh
@@ -60,9 +71,9 @@ npm 发布由 GitHub Actions 完成（`.github/workflows/release.yml`），用 n
 
 ```sh
 scripts/e2e.sh && scripts/e2e-ui.sh            # CI 跑不了端到端测试（要 DSH、hc 和桌面），发版前在本机跑
-npm version 0.1.2 --no-git-tag-version         # 改 package.json 的版本
-git commit -am "chore(release): 0.1.2" && git push
-gh release create v0.1.2 --generate-notes      # 发布 release 即触发 npm publish
+npm version X.Y.Z --no-git-tag-version         # 改 package.json 的版本
+git commit -am "chore(release): X.Y.Z" && git push
+gh release create vX.Y.Z --notes-file notes.md # 发布 release 即触发 npm publish
 ```
 
 workflow 会检查 tag 和 `package.json` 的版本一致。npm 那边的一次性配置：npmjs.com → 包的 Settings → Trusted publishing → GitHub Actions，填 `Hariketsu` / `dsh-herdr-bridge` / `release.yml`，允许 `npm publish`。确认能发之后，在 Publishing access 里选 “Require two-factor authentication and disallow tokens”。

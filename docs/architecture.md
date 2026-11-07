@@ -124,7 +124,7 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - `DSH_HC_TERMINAL`、skill、工具调用的渲染。
   - `ls`、`attach` 回放历史、多个终端同步显示、子目录会话保持原目录。
   - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`。
-  - `install-template` 往 Herdr App 的程序表里加 DSH，保留已有条目。
+  - 插件加载时自动安装 hc template；用户自己写的 `dsh` template 不被覆盖。`install-template` 往 Herdr App 的程序表里加 DSH，保留已有条目。
 - `scripts/e2e-ui.sh`（14 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
   - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达，按文件夹放进 Herdr App 的 space）、`/herdr`。
   - hc 回答审批后 Desktop 对话框被撤回；Desktop 回答后 hc 侧随之结束等待。
