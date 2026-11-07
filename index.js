@@ -6,7 +6,7 @@
 // See README.md for the design.
 import net from 'node:net'
 import { execFile } from 'node:child_process'
-import { appendFileSync, chmodSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
@@ -161,6 +161,42 @@ export function apply(ctx, config = {}) {
     try { resolve(error ? null : JSON.parse(stdout)) } catch { resolve(null) }
   }))
 
+  // Herdr App names a space it doesn't know after its first terminal's folder, and no hc label can
+  // name one; only its own CLI (`herdr-app do space.rename`) can. So the shared space is named DSH
+  // through that CLI, once Herdr App has made it, while its name is still the automatic folder name
+  // (a name the person chose is left alone). Skipped when Herdr App isn't installed or running.
+  const DSH_SPACE = 'dsh'
+  const herdrAppCandidates = [process.env.HERDR_APP_BIN, '/Applications/Herdr.app/Contents/MacOS/Herdr',
+    join(homedir(), 'Applications/Herdr.app/Contents/MacOS/Herdr')].filter(file => file && existsSync(file))
+  const herdrApp = args => new Promise(resolve => execFile(herdrAppCandidates[0] ?? 'herdr-app', args, { timeout: 5000 },
+    (error, stdout) => resolve(error ? null : stdout)))
+  let naming = false
+  async function nameDshSpace(cwd) {
+    if (naming) return
+    naming = true
+    try {
+      // Herdr App places a newly labeled terminal on its next listing, so the space can take a moment to exist.
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const listed = await herdrApp(['ls'])
+        if (listed === null) return
+        const space = JSON.parse(listed).spaces?.find(s => s.id === DSH_SPACE)
+        if (space) {
+          const automatic = [space.folder, cwd].filter(Boolean).map(folder => basename(folder))
+          if (space.name !== 'DSH' && automatic.includes(space.name)) {
+            const done = await herdrApp(['do', 'space.rename', JSON.stringify({ id: DSH_SPACE, name: 'DSH' })])
+            log('herdr app: named the shared space DSH', done === null ? '(failed)' : '')
+          }
+          return
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    } catch (error) {
+      log('herdr app: naming the shared space failed:', error?.message ?? error)
+    } finally {
+      naming = false
+    }
+  }
+
   /**
    * The Herdr App space for a session started in DSH (`herdr.space` label; Herdr App only shows
    * hc terminals that carry one, and makes a new space for an id it doesn't know).
@@ -170,7 +206,7 @@ export function apply(ctx, config = {}) {
   async function herdrSpaceFor(cwd) {
     if (herdrSpace()) return herdrSpace()
     if (herdrPlacement() === 'none') return ''
-    if (herdrPlacement() === 'dsh') return 'dsh'
+    if (herdrPlacement() === 'dsh') return DSH_SPACE
     const here = realpath(cwd || homedir())
     const spaces = []
     for (const t of (await hcJson(['ls']))?.terminals ?? []) {
@@ -178,7 +214,9 @@ export function apply(ctx, config = {}) {
       const space = (await hcJson(['get', t.address]))?.labels?.['herdr.space']
       if (space) spaces.push(space)
     }
-    return spaces.find(s => !s.startsWith('dsh-')) ?? spaces[0]
+    // The person's own space first; the plugin's (`dsh`, `dsh-…`) never count, so switching back
+    // from one shared space doesn't keep pulling sessions into it.
+    return spaces.find(s => s !== DSH_SPACE && !s.startsWith('dsh-'))
       ?? `dsh-${createHash('sha1').update(here).digest('hex').slice(0, 12)}`
   }
 
@@ -349,6 +387,7 @@ export function apply(ctx, config = {}) {
         '--label', `dsh.session=${this.sessionId}`, '--label', `dsh.title=${this.title}`]
       const space = await herdrSpaceFor(this.cwd)
       if (space) args.push('--label', `herdr.space=${space}`)
+      if (space === DSH_SPACE) nameDshSpace(this.cwd)
       if (this.cwd) args.push('--cwd', this.cwd)
       args.push('--', launcher, 'attach', '--session', this.sessionId, '--auto')
       // A failure is usually the name being taken: that terminal is still ours and reconnecting.
@@ -360,6 +399,7 @@ export function apply(ctx, config = {}) {
       if ((await hcJson(['get', term]))?.labels?.['herdr.space']) return
       const space = await herdrSpaceFor(this.cwd)
       if (space) runHc(['label', term, `herdr.space=${space}`])
+      if (space === DSH_SPACE) nameDshSpace(this.cwd)
     }
 
     /** Close every terminal mirroring this session; `except` keeps one. */

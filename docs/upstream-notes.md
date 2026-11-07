@@ -73,3 +73,5 @@
 - `HERDR_APP_HOME` 指向另一个目录，再配合 `HC_SESSION` / `XDG_STATE_HOME`，就能在用户的 Herdr 旁边再开一个连到别的 core 的实例。
 - macOS 上窗口被完全遮住时不重绘：`herdr-app shot` 返回的是最后一帧，界面层命令（如 `overlay.close`）也要等重绘才生效。
 - 首次启动的欢迎页由 `shared.json` 里的 `frame.welcomed` 控制，更新说明由 `update-notes.json` 的 `last_run` 控制；窗口位置和大小在 `window.json`。
+- hc 标签里 Herdr App 只认 `herdr.space`、`herdr.tab`、`herdr.seen`、`herdr.pinned`，没有设置 space 名的标签。不认识的 space id 建成未命名 space，名字取第一个终端的文件夹；`herdr-app ls` 返回的 `name` 是显示名，分不出自动命名还是用户改的。改名只能 `herdr-app do space.rename {"id":…,"name":…}`。
+- `herdr-app ls` / `do` 不依赖窗口可见；窗口被遮住时界面层命令（如关闭弹层）才不生效。

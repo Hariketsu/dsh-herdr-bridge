@@ -122,7 +122,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
     hc: /path/to/hc             # hc 可执行文件，默认是 PATH 上的 hc
 ```
 
-Herdr App 只显示放进它某个 space 的 hc 终端。`folder`：在 DSH 里发起的会话，加入 Herdr App 里已经有终端在同一文件夹的那个 space；没有的话，Herdr App 为这个文件夹新开一个 space。`dsh`：所有会话共用一个 space，名字取第一个会话的文件夹，你在 Herdr App 里改名后就固定下来。`none`：不放进 Herdr App，但 `hc ls` 和其他客户端照样能看到。Herdr Agent 用 `hc run dsh` 发起的会话，无论哪种设置，都显示在那个 Agent 下面。
+Herdr App 只显示放进它某个 space 的 hc 终端。`folder`：在 DSH 里发起的会话，加入 Herdr App 里已经有终端在同一文件夹的那个 space；没有的话，Herdr App 为这个文件夹新开一个 space。`dsh`：所有会话共用一个名为 DSH 的 space。Herdr App 新建 space 时会用文件夹名命名，所以插件会通过 Herdr App 自己的命令行把它改名为 DSH；你自己改过的名字不会被覆盖。`none`：不放进 Herdr App，但 `hc ls` 和其他客户端照样能看到。Herdr Agent 用 `hc run dsh` 发起的会话，无论哪种设置，都显示在那个 Agent 下面。
 
 ## 故障排查
 

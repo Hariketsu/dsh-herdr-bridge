@@ -122,7 +122,7 @@ Open **Plugins → Herdr Bridge** in DSH to choose where sessions show in Herdr 
     hc: /path/to/hc             # the hc executable; default: hc on PATH
 ```
 
-Herdr App only shows hc terminals placed in one of its spaces. With `folder`, a session started in DSH joins the Herdr App space that already has a terminal in the same folder; if there is none, Herdr App opens a new space for that folder. With `dsh`, all of them share one space, named after the first session's folder until you rename it in Herdr App. With `none`, they stay out of Herdr App but still show in `hc ls` and other clients. Sessions a Herdr agent starts with `hc run dsh` show under that agent either way.
+Herdr App only shows hc terminals placed in one of its spaces. With `folder`, a session started in DSH joins the Herdr App space that already has a terminal in the same folder; if there is none, Herdr App opens a new space for that folder. With `dsh`, all of them share one space named DSH; Herdr App names new spaces after a folder, so the plugin renames it through Herdr App's own command line, and leaves a name you chose alone. With `none`, they stay out of Herdr App but still show in `hc ls` and other clients. Sessions a Herdr agent starts with `hc run dsh` show under that agent either way.
 
 ## Troubleshooting
 
