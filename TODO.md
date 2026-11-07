@@ -21,6 +21,8 @@
 - [ ] **长时间运行的稳定性**：场景是一天几十个会话、Desktop 睡眠唤醒、hc core 重启。通过标准：每个场景之后，`hc ls` 里的 `dsh-*` 终端和 Desktop 里在运行的会话一一对应，没有残留的代理进程和过期的 socket，`bridge.log` 里没有未处理的错误。
 - [ ] **Windows / Linux**：启动器（`.cmd`）、命名管道、hc 在 Windows 上如何运行 `.cmd` 都没有测过。至少在 Linux 上跑通 `e2e.sh`。
 
+- [ ] **向 Herdr App 提 issue：第三方集成提供自己的程序条目**：现在只能合并进用户自己的 `programs.json`（`install-template` 就是这么做的），既脆弱也不好卸载。提议用 `programs.d/` 这样的分层片段；顺带讨论 GUI Agent 上报状态不需要 PTY 进程，以及“已查看”信号。草稿待用户审阅后再提交，参考已有的 herdrdev/herdr-app#330、#651。
+
 ## P2：可选改进
 
 - [ ] **hc 侧回答审批后的回显**：现在显示 `answered in hc: "allowed-once"`，直接露出了 DSH 的枚举值，可以改成 `allowed once` 这样的人话。

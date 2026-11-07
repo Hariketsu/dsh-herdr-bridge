@@ -182,6 +182,7 @@ def start_herdr_app():
     write(APP_HOME / "update-notes.json", json.dumps({"last_run": version, "presented": []}))
     write(APP_HOME / "settings.json", json.dumps({"sounds": {"enabled": False}}))
     write(APP_HOME / "window.json", json.dumps({"state": "windowed", "bounds": [80.0, 60.0, *map(float, SIZE)]}))
+    run("dsh-hc", "install-template")  # DSH's name and icon in this Herdr's program table
     keys = ["HERDR_APP_HOME", "HC_SESSION", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "PATH"]
     run("open", "-n", "-a", "/Applications/Herdr.app", *[f"--env={k}={E[k]}" for k in keys], "--env=HERDR_APP_NO_SOUND=1")
     for _ in range(60):

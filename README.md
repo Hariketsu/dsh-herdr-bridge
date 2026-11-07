@@ -36,10 +36,10 @@ Desktop 和 `dsh web` 同一时间只能有一个接入 Herdr（见已知限制�
    dsh plugin --profile desktop add dsh-herdr-bridge --ignore-scripts --config.auto-install-peers=false   # 或 --profile web
    ```
 2. 重新打开 Desktop 或启动 `dsh web`。插件加载时会生成命令 `~/.dsh/herdr-bridge/bin/dsh-hc`。
-3. 把它加进 PATH（下文的示例都假设已经加好），并安装 hc template，让 `hc run dsh "任务"` 可用：
+3. 把它加进 PATH（下文的示例都假设已经加好），然后执行 `install-template`。它安装 hc template，让 `hc run dsh "任务"` 可用；装了 Herdr App 的话，还会在 Herdr App 的程序表里加上 DSH 的名字和图标，DSH 会话在 Agent 列表里就不再是通用图标：
    ```sh
    fish_add_path ~/.dsh/herdr-bridge/bin                # fish；zsh/bash 在 rc 文件里加 export PATH="$HOME/.dsh/herdr-bridge/bin:$PATH"
-   dsh-hc install-template                              # 写入 ~/.config/herdr-core/templates/dsh.md
+   dsh-hc install-template                              # 写入 hc template；有 Herdr App 时再写入它的 programs.json 和图标
    ```
 
 **确认安装成功**：
@@ -50,7 +50,7 @@ dsh-hc ls          # 列出 DSH 里最近的会话（还没有会话时显示 no
 
 然后在 DSH 里随便发一条消息，`hc ls` 里应该出现 `dsh-<短 id>` 终端。
 
-**卸载**：退出 Desktop 或停掉 `dsh web`，执行 `dsh plugin --profile <profile> remove dsh-herdr-bridge`；如果你在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 里加过 `herdr-bridge` 配置，一并删掉。再删除 `~/.config/herdr-core/templates/dsh.md` 和 `~/.dsh/herdr-bridge/`。已经开着的 `dsh-*` 终端会在宽限期后自行退出。
+**卸载**：退出 Desktop 或停掉 `dsh web`，执行 `dsh plugin --profile <profile> remove dsh-herdr-bridge`；如果你在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 里加过 `herdr-bridge` 配置，一并删掉。再删除 `~/.config/herdr-core/templates/dsh.md`、`~/.dsh/herdr-bridge/`，以及 `~/.config/herdr-app/programs.json` 里的 `dsh` 条目和 `~/.config/herdr-app/icons/dsh-herdr-bridge.svg`。已经开着的 `dsh-*` 终端会在宽限期后自行退出。
 
 ## 快速上手
 
@@ -131,6 +131,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 | DSH 里在用的会话，`hc ls` 里没有 | 日志里有没有插件加载和开终端失败的记录；DSH 进程能否找到 `hc`（Desktop 用登录 shell 的 PATH，`dsh web` 用启动它的 shell 的 PATH；找不到就在配置里设 `hc`）；是否同时开着 Desktop 和 `dsh web`（见已知限制） |
 | `dsh-hc: command not found` | PATH 没加好；直接用 `~/.dsh/herdr-bridge/bin/dsh-hc`。这个文件不存在说明插件没加载 |
 | `hc run dsh …` 提示找不到 template | 执行 `dsh-hc install-template` |
+| Herdr App 里 DSH 会话显示通用的机器人图标 | 先启动过一次 Herdr App，再执行 `dsh-hc install-template`；它会提示 `programs.json` 是否写入或保留了已有的 `dsh` 条目 |
 | 终端显示“断开 → 重新连接” | 插件重载了（比如你在 DSH 里改了设置），正常现象，地址不变 |
 | `dsh-*` 终端突然退出 | DSH 退出或插件超过 `reconnectGraceSeconds` 没回来；重开 DSH 后，会话下次运行时会重新映射 |
 | 终端报协议版本不符 | 插件升级后旧终端还在跑旧代理；关掉终端重新 `attach` |
@@ -160,7 +161,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 ```sh
 scripts/dev.sh up          # 隔离环境：模拟 LLM + 隔离 hc core + 隔离 dsh web（Desktop 替身）
 scripts/dev.sh reload      # 热重载插件
-scripts/e2e.sh             # 32 项 hc 侧回归
+scripts/e2e.sh             # 35 项 hc 侧回归
 scripts/e2e-ui.sh          # 13 项 UI 侧回归（ego-browser）
 scripts/dev.sh down
 scripts/desktop.sh reload  # 把改动热重载进真实 Desktop（只改 cordis.patch.yml 里 herdr-bridge 这一项，首次会备份）
@@ -168,4 +169,4 @@ scripts/desktop.sh reload  # 把改动热重载进真实 Desktop（只改 cordis
 
 ## 许可
 
-MIT
+MIT。`assets/dsh.svg` 是 DeepSeek Harness 的标志，取自 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT，Copyright (c) 2026 DeepSeek）；DeepSeek 的名称和标志归其所有者。
