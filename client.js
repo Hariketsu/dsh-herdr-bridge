@@ -1,4 +1,4 @@
-// dsh-herdr-bridge, browser half: this plugin's settings page on the Plugins page.
+// dsh-herdr-bridge, browser half: this plugin's settings, shown on its own page under Plugins.
 // Hand-written in the client module system's lazy-CJS factory format (the format DSH's own tsdown
 // preset emits), so the package needs no build. It edits the volatile fields of the plugin's
 // Config (`herdrPlacement`, `herdrSpace`) through the Host's settings form for the `herdr-bridge`
@@ -16,12 +16,11 @@ window.__ModuleLoader__.load({
 		const NS = "herdrBridge";
 		/** Settings namespace: the plugin's profile entry id. */
 		const SETTINGS = "herdr-bridge";
-		/** Plugins page row key: `<package>#<row id>`. */
-		const ROW = "dsh-herdr-bridge#herdr-bridge";
+		/** Plugins page key of this bundle: its package name. */
+		const BUNDLE = "dsh-herdr-bridge";
 		const PLACEMENTS = ["folder", "dsh", "none"];
 
 		const en = {
-			summary: "Mirrors DSH sessions into Herdr Core and Herdr App",
 			placement: "Where Herdr App shows sessions started in DSH",
 			folder: "By folder",
 			folderHint: "A session joins the Herdr App space that already has a terminal in its folder, or opens a new space for that folder.",
@@ -42,7 +41,6 @@ window.__ModuleLoader__.load({
 			saving: "Saving…",
 		};
 		const zh = {
-			summary: "把 DSH 会话接进 Herdr Core 和 Herdr App",
 			placement: "在 DSH 里发起的会话放在 Herdr App 的哪里",
 			folder: "按文件夹归位",
 			folderHint: "加入 Herdr App 里已经有终端在同一文件夹的那个 space；没有的话，为这个文件夹新开一个 space。",
@@ -98,7 +96,6 @@ window.__ModuleLoader__.load({
 			const t = props.t;
 			const state = props.useHerdrBridgeForm((snapshot) => snapshot);
 			const id = useId();
-			if (props.view === "summary") return t("summary");
 			const disabled = !state.writable || state.saving;
 			const placement = PLACEMENTS.includes(state.herdrPlacement.text) ? state.herdrPlacement.text : "folder";
 			return h(SettingsForm, {
@@ -134,14 +131,14 @@ window.__ModuleLoader__.load({
 
 		const inject = ["slots", "locale", "configForms"];
 
-		/** Register the dictionaries and, while the Host serves the namespace, the row's settings page. */
+		/** Register the dictionaries and, while the Host serves the namespace, the settings on the bundle's page (between its detail and its components). */
 		function apply(ctx) {
 			ctx.effect(() => ctx.locale.register(NS, { en, zh }), "herdr-bridge: dictionaries");
 			const form = placementForm(ctx.configForms.get(SETTINGS));
 			ctx.effect(() => () => { form.dispose(); }, "herdr-bridge: settings form");
-			ctx.effect(() => ctx.configForms.whileServed([SETTINGS], () => ctx.slots.inject("plugins.row.config", () => ctx.slots.register({
-				name: "plugins.row.config",
-				key: ROW,
+			ctx.effect(() => ctx.configForms.whileServed([SETTINGS], () => ctx.slots.inject("plugins.bundle.config", () => ctx.slots.register({
+				name: "plugins.bundle.config",
+				key: BUNDLE,
 				locale: NS,
 				inject: () => form.face,
 			}, SettingsPage))), "herdr-bridge: settings page");

@@ -111,7 +111,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 
 ## 配置
 
-在 DSH 里打开 **插件 → dsh-herdr-bridge → 配置**，就能选择会话在 Herdr App 里放在哪里，改完不用重启就生效。所有设置也都可以写在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `herdr-bridge` 条目下，全部可选：
+在 DSH 里打开 **插件 → Herdr 桥接**，就能在插件页上直接选择会话在 Herdr App 里放在哪里，改完不用重启就生效。所有设置也都可以写在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `herdr-bridge` 条目下，全部可选：
 
 ```yaml
 - id: herdr-bridge

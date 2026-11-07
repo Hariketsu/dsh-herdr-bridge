@@ -111,7 +111,7 @@ General hc usage comes from `~/.agents/skills/herdr-core`, which DSH discovers a
 
 ## Configuration
 
-Open **Plugins → dsh-herdr-bridge → Configure** in DSH to choose where sessions show in Herdr App; changes apply without a restart. Everything can also be set, all optional, under the `herdr-bridge` entry in `~/.dsh/profiles/<profile>/cordis.patch.yml`:
+Open **Plugins → Herdr Bridge** in DSH to choose where sessions show in Herdr App; changes apply without a restart. Everything can also be set, all optional, under the `herdr-bridge` entry in `~/.dsh/profiles/<profile>/cordis.patch.yml`:
 
 ```yaml
 - id: herdr-bridge
