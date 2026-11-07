@@ -6,14 +6,16 @@
 //   dsh-hc new                          a new DSH session in the current folder (hc template `dsh`)
 //   dsh-hc attach <session id | title>  take over an existing DSH session
 //   dsh-hc ls [--days N] [--json]       recent DSH sessions
-//   dsh-hc install-template             install the hc template `dsh`
+//   dsh-hc install-template             install the hc template `dsh`, and DSH's name and icon in
+//                                       Herdr App's program table when Herdr App is there
 //
 // Started through the launcher the plugin writes ($DSH_HOME/herdr-bridge/bin/dsh-hc), which sets
 // DSH_HERDR_SOCKET and runs this file with the Node that ships with DSH Desktop.
 import net from 'node:net'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const PROTOCOL = 1
 const SOCKET = process.env.DSH_HERDR_SOCKET
@@ -151,6 +153,32 @@ description: A DeepSeek Harness Desktop session in this folder (via dsh-herdr-br
 command: ${quoted} new
 ---
 `)
+  process.stdout.write(`${file}\n`)
+  installHerdrApp()
+}
+
+// Herdr App names and draws agents from its program table: the built-in one, with the person's
+// programs.json on top, entry by entry. DSH isn't built in, so add an entry for 7501 app `dsh`.
+// Same folder on every platform: $HERDR_APP_HOME, else $XDG_CONFIG_HOME/herdr-app, else ~/.config/herdr-app.
+const HERDR_PROGRAM = { name: 'DSH', icon: 'icons/dsh-herdr-bridge.svg', tint: true, tile: '#4d6bfe', color: '#ffffff' }
+
+function installHerdrApp() {
+  const dir = process.env.HERDR_APP_HOME || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'herdr-app')
+  if (!existsSync(dir)) return // no Herdr App here (it creates the folder on first start)
+  const file = join(dir, 'programs.json')
+  let table = {}
+  try {
+    if (existsSync(file)) table = JSON.parse(readFileSync(file, 'utf8'))
+  } catch (error) {
+    return process.stderr.write(`dsh-hc: left ${file} alone, it isn't valid JSON (${error.message})\n`)
+  }
+  mkdirSync(join(dir, 'icons'), { recursive: true })
+  copyFileSync(fileURLToPath(new URL('./assets/dsh.svg', import.meta.url)), join(dir, HERDR_PROGRAM.icon))
+  // An entry already there is the person's (or ours from before): keep it.
+  if (table.programs?.dsh) return process.stdout.write(`${file} (kept its dsh entry)\n`)
+  table.programs = { ...table.programs, dsh: HERDR_PROGRAM }
+  writeFileSync(`${file}.tmp`, `${JSON.stringify(table, null, 2)}\n`)
+  renameSync(`${file}.tmp`, file)
   process.stdout.write(`${file}\n`)
 }
 

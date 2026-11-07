@@ -11,6 +11,7 @@
     "index.js",
     "render.js",
     "proxy.js",
+    "assets/dsh.svg",
     "cordis.patch.yml",
     "README.md"
   ],

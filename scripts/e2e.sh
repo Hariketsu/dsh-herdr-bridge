@@ -107,6 +107,19 @@ hc wait "$R" --timeout 60 >/dev/null
 check "and the turn finishes" "$(state "$R")" done
 contains "the reconnect is visible" "$R" "⋯ reconnected"
 
+# install-template also gives DSH a name and icon in Herdr App's program table, keeping the person's entries.
+APPHOME=${DSH_BRIDGE_ISO:-/tmp/dsh-iso}/herdr-app-test
+rm -rf "$APPHOME"; mkdir -p "$APPHOME"
+printf '{"programs":{"mine":{"name":"Mine"}}}' > "$APPHOME/programs.json"
+HERDR_APP_HOME=$APPHOME dsh-hc install-template >/dev/null
+prog() { python3 -I -c 'import json,sys;p=json.load(open(sys.argv[1]))["programs"];print(p.get(sys.argv[2],{}).get("name",""))' "$APPHOME/programs.json" "$1"; }
+check "install-template adds DSH to Herdr App's programs" "$(prog dsh):$(prog mine)" "DSH:Mine"
+check "and installs its icon" "$([ -s "$APPHOME/icons/dsh-herdr-bridge.svg" ] && echo yes)" yes
+python3 -I -c 'import json,sys;f=sys.argv[1];t=json.load(open(f));t["programs"]["dsh"]["name"]="My DSH";json.dump(t,open(f,"w"))' "$APPHOME/programs.json"
+HERDR_APP_HOME=$APPHOME dsh-hc install-template >/dev/null
+check "and keeps a dsh entry the person changed" "$(prog dsh)" "My DSH"
+rm -rf "$APPHOME"
+
 for t in "$T" "$A" "$B" "$Q" "$E" "$V" "$S" "$R"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
 for t in $(dsh_terminals); do hc kill "$t" >/dev/null 2>&1; done
 [ $FAILED = 0 ] && echo "all passed" || echo "some checks failed"
