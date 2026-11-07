@@ -5,16 +5,14 @@
 ## P0：公开发布前
 
 - [ ] **发布 0.1.1**：npm 上是 0.1.0，还不含终端标题、首段回复和 Herdr App 图标这几项修复。
-- [ ] **英文 README**：英文版作为默认的 `README.md`，现有中文版改名为 `README.zh-CN.md`，两者互相链接。配图已经是英文演示。
 - [ ] **从 npm 安装到真实 Desktop**：`npm pack` 出的包已在隔离的 `dsh web` 里装过、卸过：插件能加载，`dsh-hc ls`、`install-template` 正常，卸载后 bundle 条目被移除，DSH 启动没有警告。发布后还要在 Desktop profile 上按 README 走一遍，包括发一条消息后 `hc ls` 出现 `dsh-<短 id>`。
 - [ ] **Desktop 和 `dsh web` 同时运行**：后启动的那个不提供控制 socket（`index.js` 里的 probe），但它的插件可能仍然会为自己的会话开终端，这些终端会连到另一个 Host。先实测会发生什么；至少保证不出现连错 Host 的终端，然后把 README 里这条限制写准确。
 
 ## P1：已知问题与待验证
 
-- [ ] **重载后丢失上一回合的结论**：插件重载后，空闲会话的状态从 `done` 变成 `idle`。修法：让代理记住最后一次 7501 状态，重连时在 hello 里带上。
 - [ ] **`turn/end{max-tokens}` 是否该映射为 `done`**：回合因为输出上限被截断，不一定是任务完成。对照 hc 的状态语义，以及 Claude Code 等原生 Agent 在同类情况下报什么，再决定是 `done` 还是 `error`。
 - [ ] **用户在真实 Desktop 里发起的会话**：隔离 `dsh web` 里由 `e2e-ui.sh` 覆盖，真实 Desktop 没法自动化。通过标准：正常使用时，会话一开始运行，Herdr App 里就出现 `dsh-<短 id>`，状态随回合变化。
-- [ ] **`hc interrupt` 会不会清掉已排队的消息**：插件调用的是 `sessionController.cancel`，按 DSH 文档默认会清空排队和插话的输入。写一个测试：排两条消息后 interrupt，确认行为并写进 README。
+- [ ] **`hc interrupt` 会不会清掉已排队的消息**：插件调用的是 `sessionController.cancel`，按 DSH 文档默认会清空排队和插话的输入。写一个测试：排两条消息后 interrupt，确认行为并写进两份 README。
 - [ ] **多题提问、多选、请求中途被撤回**：代码有处理，测试只覆盖单题单选和撤回提问。补进 `e2e.sh`（mock-llm 需要能出多题、多选的提问）。
 - [ ] **子 Agent 的审批显示在父会话的终端里**：代码有处理，没有测。
 - [ ] **会话归档或删除时终端是否随之结束**：只覆盖了 Agent 释放这条路径。

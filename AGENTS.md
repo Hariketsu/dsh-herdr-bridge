@@ -8,7 +8,7 @@ dsh-herdr-bridge 是一个 DSH 插件，把 DSH（Desktop 和 `dsh web`）的会
 
 | 要改的东西 | 先读 |
 |---|---|
-| 用户可见的行为、安装、配置 | [README.md](README.md) |
+| 用户可见的行为、安装、配置 | [README.md](README.md)（英文，默认）和 [README.zh-CN.md](README.zh-CN.md) |
 | 架构、状态映射、竞争应答、重连 | [docs/architecture.md](docs/architecture.md)，其中“否决的方案”避免重走老路 |
 | 和 DSH / hc / Herdr App 交互的代码 | [docs/upstream-notes.md](docs/upstream-notes.md)；与实际不符时以 `ref/` 里的上游源码和测试结果为准，并更新记录 |
 | 测试、开发环境、真实 Desktop 冒烟、README 配图 | [docs/development.md](docs/development.md) |
@@ -56,6 +56,6 @@ scripts/dev.sh up && scripts/e2e.sh && scripts/e2e-ui.sh; scripts/dev.sh down
 ## 收尾
 
 - 汇报跑了哪些测试、结果如何、哪些路径没验证。测试没跑，说明原因。
-- 用户可见的行为变了，更新 README；设计变了，更新 architecture.md；发现上游行为和记录不符，更新 upstream-notes.md；留下的问题记进 TODO.md。
+- 用户可见的行为变了，同时更新两份 README（英文和中文内容保持一致）；设计变了，更新 architecture.md；发现上游行为和记录不符，更新 upstream-notes.md；留下的问题记进 TODO.md。
 - 只改任务需要的部分；看到范围外的问题，记下来或告诉用户，不要顺手改。
 - 停掉隔离环境（`scripts/dev.sh down`），ego-browser 的 task space 调用 `finish({ keep: [] })`，删掉不再需要的临时目录。

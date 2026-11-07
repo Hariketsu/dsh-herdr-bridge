@@ -1,6 +1,6 @@
 # 设计与实现
 
-这份文档写给想了解或修改 dsh-herdr-bridge 的人：为什么这样设计、各部分如何通信、哪些方案被否决、测试覆盖了什么。使用说明见 [README](../README.md)，开发回路见 [development.md](development.md)，上游接口的观测记录见 [upstream-notes.md](upstream-notes.md)，待办见 [TODO.md](../TODO.md)。
+这份文档写给想了解或修改 dsh-herdr-bridge 的人：为什么这样设计、各部分如何通信、哪些方案被否决、测试覆盖了什么。使用说明见 [README](../README.md)（[中文](../README.zh-CN.md)），开发回路见 [development.md](development.md)，上游接口的观测记录见 [upstream-notes.md](upstream-notes.md)，待办见 [TODO.md](../TODO.md)。
 
 ## 产品原则
 
@@ -62,7 +62,7 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 | 审批或提问进行中 | `blocked`，`kind=permission \| question` |
 | `session/title` | `title` |
 
-插件重载后，新实例不知道上一回合是怎么结束的，空闲会话会从 `done` 变成 `idle`。修法见 [TODO.md](../TODO.md)。
+插件重载后，新实例不知道空闲会话的上一回合是怎么结束的。代理记得自己最后显示的 7501 状态，重连时放在 hello 的 `status` 里带回来；插件在还没亲眼看到这个会话变化之前，用它恢复 `done` 或 `error`（`working`、`blocked` 由实时事件决定，不靠记忆）。这是向后兼容的新增字段，所以没有升 `PROTOCOL`：旧代理不带它，旧插件忽略它。
 
 ## 渲染（`hc read` 读到什么）
 
@@ -115,12 +115,12 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 
 最近一次全部通过：2026-11-07，macOS，版本组合见 README 的“要求”。没有 CI，测试在本机手动执行。
 
-- `scripts/e2e.sh`（35 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
+- `scripts/e2e.sh`（37 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
   - 新建会话、标题（终端标题、7501、标签）、`send --wait`、interrupt、模型报错。
   - 审批从 hc 回答、blocked 时 hc 拒绝普通 send、blocked 时 interrupt、提问。
   - `DSH_HC_TERMINAL`、skill、工具调用的渲染。
   - `ls`、`attach` 回放历史、多个终端同步显示、子目录会话保持原目录。
-  - 运行中重载后地址不变并能跑完回合。
+  - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`。
   - `install-template` 往 Herdr App 的程序表里加 DSH，保留已有条目。
 - `scripts/e2e-ui.sh`（13 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
   - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达）、`/herdr`。

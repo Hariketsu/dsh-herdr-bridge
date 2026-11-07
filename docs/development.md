@@ -15,7 +15,7 @@ dsh plugin --profile desktop add ~/dsh-herdr-bridge   # 先完全退出 Desktop�
 scripts/dev.sh up        # 模拟 LLM + 隔离 hc core + 隔离 dsh web，插件以链接方式装好，template 已安装
 # 改代码…
 scripts/dev.sh reload    # 热重载，Host 不重启
-scripts/e2e.sh           # hc 侧回归（35 项）
+scripts/e2e.sh           # hc 侧回归（37 项）
 scripts/e2e-ui.sh        # UI 侧回归（13 项，ego-browser）
 eval "$(scripts/dev.sh env)"; hc ls; dsh-hc ls   # 手动查看隔离环境
 scripts/dev.sh down      # 停掉隔离 hc core、dsh web 和 mock-llm.py
@@ -53,6 +53,19 @@ ego-browser 扮演 DSH 用户，hc 扮演 Herdr Agent。
 - 新会话的快捷键是 `Alt+Meta+n`。
 - 斜杠命令要按两次 Enter：第一次选中补全项，第二次执行。
 - 用完后调用 `finish({ keep: [] })` 关掉 task space。
+
+## 发布
+
+npm 发布由 GitHub Actions 完成（`.github/workflows/release.yml`），用 npm 的 trusted publishing（OIDC）：仓库里不存 npm token，发布的包自动带 provenance。
+
+```sh
+scripts/e2e.sh && scripts/e2e-ui.sh            # CI 跑不了端到端测试（要 DSH、hc 和桌面），发版前在本机跑
+npm version 0.1.2 --no-git-tag-version         # 改 package.json 的版本
+git commit -am "chore(release): 0.1.2" && git push
+gh release create v0.1.2 --generate-notes      # 发布 release 即触发 npm publish
+```
+
+workflow 会检查 tag 和 `package.json` 的版本一致。npm 那边的一次性配置：npmjs.com → 包的 Settings → Trusted publishing → GitHub Actions，填 `Hariketsu` / `dsh-herdr-bridge` / `release.yml`，允许 `npm publish`。确认能发之后，在 Publishing access 里选 “Require two-factor authentication and disallow tokens”。
 
 ## README 配图
 

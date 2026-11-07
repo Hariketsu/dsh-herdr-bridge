@@ -1,5 +1,7 @@
 # dsh-herdr-bridge
 
+[English](README.md) | 简体中文
+
 一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件，把 DSH 的会话接进 [Herdr Core](https://github.com/herdrdev/herdr-core)（`hc`）：每个会话变成一个 hc 终端，Herdr 里的其他 Agent 可以像操控 Claude Code 一样读取和操控它。适用于 DSH Desktop 和 DSH Web（`dsh web`）。
 
 装好以后：
@@ -141,7 +143,6 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 
 - **Desktop 和 `dsh web` 不能同时接入**：两者共用 `~/.dsh/herdr-bridge/`，只有先启动的那个能正常接入 Herdr。
 - **在 DSH 里看过的回合，Herdr 仍会标成没看过**：Herdr 不知道 DSH 界面也是一个观看者。
-- **插件重载后，空闲会话从 `done` 变成 `idle`**：上一回合的结论丢失。
 - **每个映射出去的会话有一个代理进程**，实际物理内存约 13–14 MB。
 - **插件升级后，已开着的终端仍运行旧代理**，直到重开。
 - **审批的“另一边撤回”依赖 DSH 的内部实现**：DSH 改动后可能失效，表现是 DSH 界面的对话框不消失，不会导致错误批准。
@@ -161,7 +162,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 ```sh
 scripts/dev.sh up          # 隔离环境：模拟 LLM + 隔离 hc core + 隔离 dsh web（Desktop 替身）
 scripts/dev.sh reload      # 热重载插件
-scripts/e2e.sh             # 35 项 hc 侧回归
+scripts/e2e.sh             # 37 项 hc 侧回归
 scripts/e2e-ui.sh          # 13 项 UI 侧回归（ego-browser）
 scripts/dev.sh down
 scripts/desktop.sh reload  # 把改动热重载进真实 Desktop（只改 cordis.patch.yml 里 herdr-bridge 这一项，首次会备份）
