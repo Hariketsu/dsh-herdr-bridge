@@ -6,16 +6,13 @@
 //   dsh-hc new                          a new DSH session in the current folder (hc template `dsh`)
 //   dsh-hc attach <session id | title>  take over an existing DSH session
 //   dsh-hc ls [--days N] [--json]       recent DSH sessions
-//   dsh-hc install-template             install the hc template `dsh`, and DSH's name and icon in
-//                                       Herdr App's program table when Herdr App is there
+//   dsh-hc install-template             install the hc template `dsh` and DSH's Herdr App entry again
+//                                       (the plugin does this itself whenever it loads)
 //
 // Started through the launcher the plugin writes ($DSH_HOME/herdr-bridge/bin/dsh-hc), which sets
 // DSH_HERDR_SOCKET and runs this file with the Node that ships with DSH Desktop.
 import net from 'node:net'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { installHerdrApp, installTemplate } from './install.js'
 
 const PROTOCOL = 1
 const SOCKET = process.env.DSH_HERDR_SOCKET
@@ -146,50 +143,13 @@ function lastStatus(text) {
   return { state: fields.state, msg: fields.msg ? Buffer.from(fields.msg, 'base64').toString() : '' }
 }
 
-function templateDir() {
-  if (process.platform === 'win32') return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'herdr-core', 'templates')
-  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'herdr-core', 'templates')
-}
-
-function installTemplate() {
+function installAll() {
   if (!LAUNCHER) fail('DSH_HERDR_LAUNCHER is not set; run dsh-hc through its launcher')
-  const quoted = /\s/.test(LAUNCHER) ? `"${LAUNCHER}"` : LAUNCHER
-  const dir = templateDir()
-  mkdirSync(dir, { recursive: true })
-  const file = join(dir, 'dsh.md')
-  writeFileSync(file, `---
-name: dsh
-description: A DeepSeek Harness Desktop session in this folder (via dsh-herdr-bridge). Interactive; reports status. Find existing sessions with \`dsh-hc ls\` and take one over with \`hc run … ${quoted} attach <id|title>\`.
-command: ${quoted} new
----
-`)
-  process.stdout.write(`${file}\n`)
-  installHerdrApp()
-}
-
-// Herdr App names and draws agents from its program table: the built-in one, with the person's
-// programs.json on top, entry by entry. DSH isn't built in, so add an entry for 7501 app `dsh`.
-// Same folder on every platform: $HERDR_APP_HOME, else $XDG_CONFIG_HOME/herdr-app, else ~/.config/herdr-app.
-const HERDR_PROGRAM = { name: 'DSH', icon: 'icons/dsh-herdr-bridge.svg', tint: true, tile: '#4d6bfe', color: '#ffffff' }
-
-function installHerdrApp() {
-  const dir = process.env.HERDR_APP_HOME || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'herdr-app')
-  if (!existsSync(dir)) return // no Herdr App here (it creates the folder on first start)
-  const file = join(dir, 'programs.json')
-  let table = {}
-  try {
-    if (existsSync(file)) table = JSON.parse(readFileSync(file, 'utf8'))
-  } catch (error) {
-    return process.stderr.write(`dsh-hc: left ${file} alone, it isn't valid JSON (${error.message})\n`)
+  for (const { file, result } of [installTemplate(LAUNCHER), installHerdrApp()]) {
+    const note = { written: '', unchanged: ' (already up to date)', kept: ' (kept: you made this one)',
+      absent: ' (skipped: Herdr App not started here yet)', invalid: ' (left alone: not valid JSON)' }[result]
+    process.stdout.write(`${file}${note}\n`)
   }
-  mkdirSync(join(dir, 'icons'), { recursive: true })
-  copyFileSync(fileURLToPath(new URL('./assets/dsh.svg', import.meta.url)), join(dir, HERDR_PROGRAM.icon))
-  // An entry already there is the person's (or ours from before): keep it.
-  if (table.programs?.dsh) return process.stdout.write(`${file} (kept its dsh entry)\n`)
-  table.programs = { ...table.programs, dsh: HERDR_PROGRAM }
-  writeFileSync(`${file}.tmp`, `${JSON.stringify(table, null, 2)}\n`)
-  renameSync(`${file}.tmp`, file)
-  process.stdout.write(`${file}\n`)
 }
 
 // Terminal columns a string takes: East Asian wide and full-width characters take two.
@@ -235,7 +195,7 @@ switch (command) {
     break
   }
   case 'install-template':
-    installTemplate()
+    installAll()
     break
   default:
     fail('usage: dsh-hc new | attach <session id | title> | ls [--days N] [--json] | install-template', 2)

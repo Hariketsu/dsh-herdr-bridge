@@ -28,7 +28,7 @@ jobs:
           [ "${GITHUB_REF_NAME}" = "v${version}" ] || { echo "release tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
       # The end-to-end suites need DSH, hc and a desktop; run them locally before tagging.
       - name: Syntax check
-        run: for f in index.js render.js proxy.js client.js; do node --check "$f"; done
+        run: for f in index.js render.js proxy.js client.js install.js; do node --check "$f"; done
       - name: npm 11.5.1+ (trusted publishing)
         run: npm install -g npm@^11.5.1
       - run: npm publish --access public

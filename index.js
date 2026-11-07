@@ -12,6 +12,7 @@ import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { Renderer, crlf, oneLine, osc, style, windowTitle } from './render.js'
+import { installHerdrApp, installTemplate } from './install.js'
 
 export const name = 'herdr-bridge'
 
@@ -141,6 +142,16 @@ export function apply(ctx, config = {}) {
     chmodSync(file, 0o755)
     return file
   })()
+
+  // hc's `dsh` template and Herdr App's DSH entry, kept current so nobody runs an install step.
+  for (const install of [() => installTemplate(launcher), installHerdrApp]) {
+    try {
+      const { file, result } = install()
+      if (result !== 'unchanged' && result !== 'absent') log('install', file, result)
+    } catch (error) {
+      log('install failed:', error?.message ?? error)
+    }
+  }
 
   const runHc = (args, done) => execFile(hc, args, (error, stdout, stderr) => {
     if (error) log('hc', args[0], 'failed:', oneLine(stderr || error.message, 300))

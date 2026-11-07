@@ -23,6 +23,8 @@ contains() { # contains <label> <terminal> <text>
   if hc read "$2" --lines 300 2>/dev/null | grep -qF -- "$3"; then echo "ok   $1"; else echo "FAIL $1: '$3' not on screen"; FAILED=1; fi
 }
 
+check "the plugin installs the hc template itself" "$(grep -c '^generator: dsh-herdr-bridge$' "$XDG_CONFIG_HOME/herdr-core/templates/dsh.md" 2>/dev/null)" 1
+
 T=e2e-$RUN
 hc run --bg --name "$T" dsh "hello [[e2e]]" >/dev/null
 hc wait "$T" --timeout 60 >/dev/null
@@ -124,6 +126,12 @@ python3 -I -c 'import json,sys;f=sys.argv[1];t=json.load(open(f));t["programs"][
 HERDR_APP_HOME=$APPHOME dsh-hc install-template >/dev/null
 check "and keeps a dsh entry the person changed" "$(prog dsh)" "My DSH"
 rm -rf "$APPHOME"
+MINE=${DSH_BRIDGE_ISO:-/tmp/dsh-iso}/template-test
+rm -rf "$MINE"; mkdir -p "$MINE/herdr-core/templates"
+printf -- '---\ncommand: my-dsh\n---\n' > "$MINE/herdr-core/templates/dsh.md"
+XDG_CONFIG_HOME=$MINE HERDR_APP_HOME=$MINE/none dsh-hc install-template >/dev/null
+check "install-template keeps a dsh template the person wrote" "$(grep -c '^command: my-dsh$' "$MINE/herdr-core/templates/dsh.md")" 1
+rm -rf "$MINE"
 
 for t in "$T" "$A" "$B" "$Q" "$E" "$V" "$S" "$R" "$F"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
 for t in $(dsh_terminals); do hc kill "$t" >/dev/null 2>&1; done

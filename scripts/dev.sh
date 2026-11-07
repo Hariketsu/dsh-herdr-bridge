@@ -39,9 +39,8 @@ up)
     i=0; until grep -q "^dsh web: http" "$ISO/web.log" || [ $i -ge 60 ]; do sleep 1; i=$((i+1)); done
   fi
   hc server status >/dev/null 2>&1 || hc server start >/dev/null
-  # The plugin writes the dsh-hc launcher when it loads; the template points at it.
+  # The plugin writes the dsh-hc launcher and the hc template itself when it loads.
   i=0; until [ -x "$DSH_HOME/herdr-bridge/bin/dsh-hc" ] || [ $i -ge 30 ]; do sleep 1; i=$((i+1)); done
-  "$DSH_HOME/herdr-bridge/bin/dsh-hc" install-template >/dev/null
   grep "^dsh web:" "$ISO/web.log" | sed 's/?token=.*//'
   echo "isolated hc session: $HC_SESSION"
   ;;
