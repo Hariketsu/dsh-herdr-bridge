@@ -10,13 +10,13 @@ dsh-herdr-bridge 是一个 DSH 插件，把 DSH（Desktop 和 `dsh web`）的会
 |---|---|
 | 用户可见的行为、安装、配置 | [README.md](README.md) |
 | 架构、状态映射、竞争应答、重连 | [docs/architecture.md](docs/architecture.md)，其中“否决的方案”避免重走老路 |
-| 和 DSH / hc / Perch 交互的代码 | [docs/upstream-notes.md](docs/upstream-notes.md)；与实际不符时以 `ref/` 里的上游源码和测试结果为准，并更新记录 |
-| 测试、开发环境、真实 Desktop 冒烟 | [docs/development.md](docs/development.md) |
+| 和 DSH / hc / Herdr App 交互的代码 | [docs/upstream-notes.md](docs/upstream-notes.md)；与实际不符时以 `ref/` 里的上游源码和测试结果为准，并更新记录 |
+| 测试、开发环境、真实 Desktop 冒烟、README 配图 | [docs/development.md](docs/development.md) |
 | 计划、已知问题、待验证路径 | [TODO.md](TODO.md) |
 
 ## 不变量
 
-- 不修改 DSH、Herdr Core、Herdr App、Perch 的源码；不为 Perch 做 DSH 专项适配（例外由用户明确提出）。
+- 不修改 DSH、Herdr Core、Herdr App 的源码。
 - 生产架构里不引入第二份 DSH Runtime。测试时在隔离的 `DSH_HOME` 里跑 `dsh headless` / `dsh web` 不受此限。
 - 对 hc 只依赖 CLI 和 OSC 7501，不直接调用 hc 的 JSON-RPC。
 - DSH 和其他 Herdr Agent 一样对待：信任模型和语义都和 hc 对齐（`--force` 是唯一的闸门，插件不自动回答审批）。体验优先于实现上省事；兼顾跨平台。

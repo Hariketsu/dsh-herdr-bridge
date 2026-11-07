@@ -16,7 +16,7 @@ scripts/dev.sh up        # 模拟 LLM + 隔离 hc core + 隔离 dsh web，插件
 # 改代码…
 scripts/dev.sh reload    # 热重载，Host 不重启
 scripts/e2e.sh           # hc 侧回归（32 项）
-scripts/e2e-ui.sh        # UI 侧回归（12 项，ego-browser）
+scripts/e2e-ui.sh        # UI 侧回归（13 项，ego-browser）
 eval "$(scripts/dev.sh env)"; hc ls; dsh-hc ls   # 手动查看隔离环境
 scripts/dev.sh down      # 停掉隔离 hc core、dsh web 和 mock-llm.py
 ```
@@ -24,7 +24,7 @@ scripts/dev.sh down      # 停掉隔离 hc core、dsh web 和 mock-llm.py
 隔离环境的组成：
 
 - `DSH_HOME=/tmp/dsh-iso/home`，`dsh web` 用 profile `web`。
-- 隔离的 hc：`HC_SESSION=dshbridge`，`XDG_STATE_HOME` 和 `XDG_CONFIG_HOME` 指向 `/tmp/dsh-iso/xdg`。**不要设置 `XDG_RUNTIME_DIR`**，否则 Perch 找不到 socket（见 [upstream-notes.md](upstream-notes.md)）。
+- 隔离的 hc：`HC_SESSION=dshbridge`，`XDG_STATE_HOME` 和 `XDG_CONFIG_HOME` 指向 `/tmp/dsh-iso/xdg`。不设置 `XDG_RUNTIME_DIR`，让 hc 的 socket 留在隔离的 state 目录下（见 [upstream-notes.md](upstream-notes.md)）。
 - `PATH` 前面加上隔离环境的 `dsh-hc`。`scripts/dev.sh env` 只影响当前 shell。
 - `/tmp/dsh-iso` 可以保留给下次用。
 
@@ -54,6 +54,19 @@ ego-browser 扮演 DSH 用户，hc 扮演 Herdr Agent。
 - 斜杠命令要按两次 Enter：第一次选中补全项，第二次执行。
 - 用完后调用 `finish({ keep: [] })` 关掉 task space。
 
+## README 配图
+
+```sh
+scripts/demo-media.py    # 重新生成 docs/media/ 里的图（macOS，需要 Herdr App、ffmpeg、cwebp、img2webp）
+```
+
+- 另起一套全新的隔离环境（`/tmp/dsh-demo/iso`，mock 用 18766 端口）和虚构项目 `/tmp/dsh-demo/acme-api`，再开一个隔离的 Herdr App 实例连到这个 core。`scripts/dev.sh` 的开发环境和用户自己的 DSH、hc、Herdr App 都不受影响。
+- 剧本在 `mock-llm.py` 的 `DEMOS` 里，按 prompt 原文匹配，所以截图里看不到标记。
+- macOS 不重绘被完全遮住的窗口，`herdr-app shot` 只能拿到最后一帧。所以脚本用 `open -n` 把演示窗口调到前台，并检查每张截图都是新的；运行期间（约 1 分钟）不要切换窗口。
+- 欢迎页和更新说明靠预先写入隔离 `HERDR_APP_HOME` 里的 `shared.json`、`update-notes.json` 跳过；窗口大小由 `window.json` 固定。
+- DSH Web 用无头 Chromium（Playwright）截图，不依赖窗口可见。
+- 产出：`herdr-app.webp`（首图）、`approval.webp`（审批，静态）、`approval.anim.webp`（审批，动图：在 Herdr 回答后 DSH 的对话框撤回）。
+
 ## 真实 Desktop
 
 真实 Desktop 的 UI 无法自动化（Web API 需要 Electron 内部凭据），只能通过本插件的 hc 通道驱动，所以 UI 侧的测试在隔离环境里做。以下操作会改动用户的真实环境，需要授权（见 [AGENTS.md](../AGENTS.md)）：
@@ -79,8 +92,6 @@ cd ref
 git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness
 git clone --depth 1 https://github.com/herdrdev/herdr-core
 git clone --depth 1 https://github.com/herdrdev/herdr-app
-git clone --depth 1 https://github.com/Hariketsu/herdr-perch
-(cd herdr-perch && swift build --product perchctl -c release)   # e2e.sh 用到 perchctl
 ```
 
 ## 可移植性

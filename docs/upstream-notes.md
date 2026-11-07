@@ -6,7 +6,7 @@
 |---|---|
 | DSH（Desktop / `dsh web`） | 0.2.2-rc.1 |
 | herdr-core | 0.1.18 |
-| Perch | `40e4e2c` |
+| herdr-app | 0.1.13 |
 
 记录和实际行为不符时，以当前上游源码（`ref/`）和测试结果为准，并更新这里。
 
@@ -65,8 +65,11 @@
 - hc 选项必须写在命令之前（`hc run --bg --json --name x cmd …`），否则会被当成命令的参数。
 - 设置了 `XDG_RUNTIME_DIR` 时，hc 会把 socket 平铺放在 runtime 目录下；不设置时放在 `<state>/herdr-core/<session>/<session>.sock`。
 
-## Perch
+## Herdr App
 
-- 只扫描 `<state>/herdr-core/<session>/<session>.sock`，所以测试时不要设置 `XDG_RUNTIME_DIR`。
-- 行标题的取法：终端名 → 7501 的 title → 终端标题。
-- “完成未看”只按回合数判断。
+- Agent 列表的行和标签页用终端标题（程序用 OSC 0/2 设置的）命名，见 `defaults/mods/agents/main.js` 的 `title()`；不读 7501 的 title 和 hc 标签。标题像路径（以 `/` 或 `~` 开头）或含 `@` 时会被忽略。
+- 用 hc 启动的终端带 `herdr.space=<id>` 标签才会出现在窗口里；没有 `herdr.tab` 时，Herdr 在那个 space 里新建一个标签页。
+- 看过的 `done` 会显示成 Idle（`attention`/`seen`），状态词变了才重新提醒。
+- `HERDR_APP_HOME` 指向另一个目录，再配合 `HC_SESSION` / `XDG_STATE_HOME`，就能在用户的 Herdr 旁边再开一个连到别的 core 的实例。
+- macOS 上窗口被完全遮住时不重绘：`herdr-app shot` 返回的是最后一帧，界面层命令（如 `overlay.close`）也要等重绘才生效。
+- 首次启动的欢迎页由 `shared.json` 里的 `frame.welcomed` 控制，更新说明由 `update-notes.json` 的 `last_run` 控制；窗口位置和大小在 `window.json`。

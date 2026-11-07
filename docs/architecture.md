@@ -6,7 +6,7 @@
 
 **DSH 和其他 Herdr Agent 一样对待。** 能和 hc 语义对齐的地方直接对齐，例如信任模型（`--force` 是唯一的闸门）、消息排队、父子终端和通知。只有 DSH 天然不同的地方才专门设计：它是 GUI，一个 Workspace 里有多个会话，Desktop 本身也是一个观看者。设计目标是体验，而不是实现上省事。
 
-硬约束：不修改 DSH Desktop、Herdr Core、Herdr App、Perch 的源码；不引入第二份 DSH Runtime；对 hc 只依赖 CLI 和 OSC 7501。
+硬约束：不修改 DSH、Herdr Core、Herdr App 的源码；不引入第二份 DSH Runtime；对 hc 只依赖 CLI 和 OSC 7501。
 
 ## TUI Agent 与 GUI Agent
 
@@ -42,12 +42,12 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - hc template 由 `dsh-hc install-template` 按当前机器的路径生成。
 - **重连**：
   - 插件热重载、升级，或用户在 Desktop 里改了设置导致 profile 重组时，代理会在宽限期内重连。
-  - 重连后 hc 地址不变，父子关系不变，Perch 记录的回合数也不变。
+  - 重连后 hc 地址不变，父子关系不变。
   - 宽限期过了还没连上，代理就退出（Desktop 真的退出了）。
 - **协议版本**：插件和代理之间有协议版本号。插件升级后，已经开着的终端仍运行旧版 `proxy.js`，直到它们重开；版本不符时会明确报错。
 - **自动映射的终端命名为 `dsh-<短 id>`**：
   - hc 的终端名只能在创建时设定，而且只能用 `a-z 0-9 - _`，放不下中文标题，改名后也会过时。
-  - 所以标题放进 7501 状态和 `dsh.title` 标签。这个名字同时起到锁的作用：重载后如果旧终端还在重连，就不会重复创建。
+  - 所以标题放进终端标题（OSC 2，Herdr App 的 Agent 列表和标签页用它命名，和 TUI Agent 一样）、7501 状态和 `dsh.title` 标签。这个名字同时起到锁的作用：重载后如果旧终端还在重连，就不会重复创建。
   - 由 Herdr Agent 接管的终端，名字由 Agent 自己起。
 
 ## 状态映射（OSC 7501）
@@ -102,7 +102,7 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 | hc 的外部注册或状态上报接口 | 不存在：hc 的 29 个 RPC 方法里没有能写 status 的 |
 | 外部程序直连 Desktop Host `/api` | 凭据只在 Electron 内部；Typert Gateway 协议是生成出来的内部契约，变动快 |
 | 伪装成 hc machine（`machine add --via`） | 需要重新实现 attach / wait / send 等 core 语义 |
-| `doc.set` 发布状态 | Perch 不读 doc |
+| `doc.set` 发布状态 | doc 不是终端状态，Herdr 的状态显示和 `hc wait` 都不读它 |
 | Herdr App mod | mod 只是窗口 UI，无法让状态进入 core |
 | 在 hc 里运行 `dsh tui` | 第二份 Runtime，还会和 Desktop 争同一会话的写锁 |
 | `sh + nc` 哑管道（v1） | 只能用于 macOS；插件重载就断开；无法排版 |
@@ -112,16 +112,16 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 
 ## 验证
 
-最近一次全部通过：2026-11-07，macOS，提交 `83e610e`，版本组合见 README 的“要求”。没有 CI，测试在本机手动执行。
+最近一次全部通过：2026-11-07，macOS，版本组合见 README 的“要求”。没有 CI，测试在本机手动执行。
 
 - `scripts/e2e.sh`（32 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
-  - 新建会话、标题和标签、`send --wait`、interrupt、模型报错。
+  - 新建会话、标题（终端标题、7501、标签）、`send --wait`、interrupt、模型报错。
   - 审批从 hc 回答、blocked 时 hc 拒绝普通 send、blocked 时 interrupt、提问。
   - `DSH_HC_TERMINAL`、skill、工具调用的渲染。
   - `ls`、`attach` 回放历史、多个终端同步显示、子目录会话保持原目录。
-  - 运行中重载后地址不变并能跑完回合、Perch。
-- `scripts/e2e-ui.sh`（12 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
-  - Desktop 发起的会话自动映射、`/herdr`。
+  - 运行中重载后地址不变并能跑完回合。
+- `scripts/e2e-ui.sh`（13 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
+  - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达）、`/herdr`。
   - hc 回答审批后 Desktop 对话框被撤回；Desktop 回答后 hc 侧随之结束等待。
   - hc 回答提问后 Desktop 的提问被撤回。
   - 接管时自动映射的终端让位。
@@ -129,6 +129,6 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - 新建会话、渲染、运行中重载后地址不变并跑完回合。
   - `dsh-hc ls` 列出真实会话（含中文标题）。
   - DSH 会主动按 hc 协议回报。
-  - 只在 v1 时期验证过、当前版本未重测：反向闭环（DSH 启动 helper，接收它的回报）、Perch 显示。
+  - 只在 v1 时期验证过、当前版本未重测：反向闭环（DSH 启动 helper，接收它的回报）。
 
 未测或只间接验证的路径列在 [TODO.md](../TODO.md)。

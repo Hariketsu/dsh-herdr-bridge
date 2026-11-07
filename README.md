@@ -4,7 +4,7 @@
 
 装好以后：
 
-- **在 Herdr 里看到 DSH 会话**：会话一开始运行，[Herdr App](https://github.com/herdrdev/herdr-app) 和 [Perch](https://github.com/Hariketsu/herdr-perch) 里就出现一行 `dsh-<短 id>`，状态在 `working / done / blocked / error` 之间跟着变。
+- **在 Herdr 里看到 DSH 会话**：会话一开始运行，[Herdr App](https://github.com/herdrdev/herdr-app) 里就出现一个 `dsh-<短 id>` 终端，状态在 `working / done / blocked / error` 之间跟着变。
 - **从 Herdr 操控 DSH**：Herdr Agent 用 `hc run / send / wait / read / interrupt` 新建会话、接管已有会话、发消息、取消回合。
 - **让 DSH 调度其他 Agent**：DSH 里的模型可以用 `hc` 启动 helper（比如 Claude Code），helper 的回报会送回这个 DSH 会话。
 - **审批两边都能答**：会话等待审批或提问时，在 DSH 界面或 hc 里回答都行，先答者生效，另一边的对话框会撤回。
@@ -13,19 +13,9 @@
 
 ## 效果
 
-<!-- TODO: Perch / Herdr App 里显示 dsh-xxxx 行的截图 -->
+![Herdr App 里的三个 DSH 会话：一个等待审批，一个正在工作，一个已完成；右侧是已完成会话的对话](docs/media/herdr-app.webp)
 
-Herdr Agent 读取一个 DSH 会话时，看到的是和原生 TUI Agent 相同格式的文本（示例）：
-
-```text
-$ hc read fix
-❯ 修复 x.rs 里失败的测试
-⏺ 先跑一下测试看看失败在哪。
-⏺ bash 运行 x 的单元测试
-  ⎿ test parse_empty ... FAILED (+23 lines)
-⏺ 空输入时没有提前返回，已修复并重跑，全部通过。
-✻ done · 41s
-```
+Herdr App 里的三个 DSH 会话，状态各不相同。右侧是其中一个会话在 hc 终端里的样子：提示、回复、带描述的工具调用和回合用时，格式和原生 TUI Agent 一样。
 
 ## 要求
 
@@ -34,7 +24,6 @@ $ hc read fix
 | DSH（Desktop 或 `dsh web`） | 0.2.2-rc.1 | 插件依赖的 DSH 接口仍在变化，升级 DSH 后可能需要更新插件。`dsh headless` 不支持，`dsh tui` 没有测试过 |
 | herdr-core（`hc`） | 0.1.18 | `hc` 需要在登录 shell 的 PATH 上，或在配置里指定 |
 | herdr-app | 0.1.13 | 可选 |
-| Perch | `40e4e2c` | 可选 |
 
 Desktop 和 `dsh web` 同一时间只能有一个接入 Herdr（见已知限制）。
 
@@ -65,7 +54,7 @@ dsh-hc ls          # 列出 DSH 里最近的会话（还没有会话时显示 no
 
 ## 快速上手
 
-**1. 在 DSH 里正常使用。** 会话第一次运行时，插件为它开一个 `dsh-<短 id>` 终端，带标签 `dsh.session=<会话 id>` 和 `dsh.title=<会话标题>`（标题随改名同步）。还没运行过的会话，在 DSH 里对它输入 `/herdr`，它就会出现在 Herdr 里，命令会显示它的 hc 地址。会话关闭时，终端随之结束。
+**1. 在 DSH 里正常使用。** 会话第一次运行时，插件为它开一个 `dsh-<短 id>` 终端，终端标题就是会话标题（随改名同步），另带标签 `dsh.session=<会话 id>` 和 `dsh.title=<会话标题>`。还没运行过的会话，在 DSH 里对它输入 `/herdr`，它就会出现在 Herdr 里，命令会显示它的 hc 地址。会话关闭时，终端随之结束。
 
 **2. 从 Herdr 新建一个 DSH 会话。** 下面的 `/repo`、`fix` 都是示例：
 
@@ -92,7 +81,11 @@ hc read login                                       # 先看到之前的对话�
 
 ## 审批、提问与信任边界
 
-会话等待审批或提问时，DSH 界面照常弹出对话框，hc 终端里也显示同一个问题，状态为 `blocked`。在 hc 侧回答必须加 `--force`：
+会话等待审批或提问时，DSH 界面照常弹出对话框，hc 终端里也显示同一个问题，状态为 `blocked`。
+
+![左边是 DSH Web 里的审批对话框，右边是 Herdr App 里同一个会话在等待同一个审批](docs/media/approval.webp)
+
+在 hc 侧回答必须加 `--force`：
 
 ```sh
 hc send --force fix y      # 批准一次；n 为拒绝
@@ -146,8 +139,8 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 ## 已知限制
 
 - **Desktop 和 `dsh web` 不能同时接入**：两者共用 `~/.dsh/herdr-bridge/`，只有先启动的那个能正常接入 Herdr。
-- **DSH 里看过的回合，Perch 仍显示“完成未看”**：Herdr 不知道 DSH 界面也是一个观看者。
-- **插件重载后，空闲会话从 `done` 变成 `idle`**：上一回合的结论丢失。Perch 的“完成未看”按回合数判断，不受影响。
+- **在 DSH 里看过的回合，Herdr 仍会标成没看过**：Herdr 不知道 DSH 界面也是一个观看者。
+- **插件重载后，空闲会话从 `done` 变成 `idle`**：上一回合的结论丢失。
 - **每个映射出去的会话有一个代理进程**，实际物理内存约 13–14 MB。
 - **插件升级后，已开着的终端仍运行旧代理**，直到重开。
 - **审批的“另一边撤回”依赖 DSH 的内部实现**：DSH 改动后可能失效，表现是 DSH 界面的对话框不消失，不会导致错误批准。
@@ -168,7 +161,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 scripts/dev.sh up          # 隔离环境：模拟 LLM + 隔离 hc core + 隔离 dsh web（Desktop 替身）
 scripts/dev.sh reload      # 热重载插件
 scripts/e2e.sh             # 32 项 hc 侧回归
-scripts/e2e-ui.sh          # 12 项 UI 侧回归（ego-browser）
+scripts/e2e-ui.sh          # 13 项 UI 侧回归（ego-browser）
 scripts/dev.sh down
 scripts/desktop.sh reload  # 把改动热重载进真实 Desktop（只改 cordis.patch.yml 里 herdr-bridge 这一项，首次会备份）
 ```

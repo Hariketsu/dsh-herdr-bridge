@@ -18,7 +18,7 @@ export HC_SESSION=dshbridge
 export XDG_STATE_HOME=$ISO/xdg/state
 export XDG_CONFIG_HOME=$ISO/xdg/config
 export PATH="$ISO/home/herdr-bridge/bin:\$PATH"
-# Like macOS: no XDG_RUNTIME_DIR, so hc keeps its socket under the state home where Perch looks.
+# No XDG_RUNTIME_DIR, so hc keeps its socket under the isolated state home.
 unset HC_TERMINAL_ID XDG_RUNTIME_DIR
 EOF
 }
