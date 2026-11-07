@@ -8,8 +8,10 @@
 #             with sandbox_permissions, which raises an approval request
 #   [[question]]  call ask_user_question (pick red or blue), then echo the tool result
 #   [[env]]   run `echo DSH_HC_TERMINAL=$DSH_HC_TERMINAL` in bash, then echo the tool result
+#   [[stream]]  stream the reply word by word, 0.15 s apart
 # The request log records whether the herdr-bridge skill is in the model's context.
 #   anything else: answer "MOCK-REPLY: <prompt>" at once
+# Prompts listed in DEMOS play a scripted English scene for the README media (demo-media.py).
 import json, re, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -62,6 +64,67 @@ def tool_result_text(body):
     return ""
 
 
+# README demo scripts (scripts/demo-media.sh), keyed by the exact prompt so screenshots show no
+# markers. Each step is the reply to one model call within the turn: optional text, then optional
+# bash call; `wait` holds the reply that many seconds first (keeps the session `working`).
+DEMO_RELEASE_COMMAND = "mkdir -p /var/tmp/acme-releases/1.4.0 && cp -R dist/. /var/tmp/acme-releases/1.4.0/"
+DEMOS = {
+    "The date parsing test is failing. Find out why and fix it.": {
+        "title": "Fix failing date parsing test",
+        "steps": [
+            {"text": "I'll run the test suite to see the failure.", "wait": 3,
+             "bash": {"command": "python3 -m unittest 2>&1 | tail -1", "description": "Run the unit tests"}},
+            {"wait": 5, "text": "`parse_date` uses a fixed format, so ISO timestamps ending in `Z` are rejected. "
+                     "I'll strip the UTC suffix before parsing.",
+             "bash": {"command": "sed -i.bak 's/strptime(value,/strptime(value.removesuffix(\"Z\"),/' acme/dates.py && rm acme/dates.py.bak",
+                      "description": "Accept a trailing Z in parse_date"}},
+            {"wait": 3, "bash": {"command": "python3 -m unittest 2>&1 | tail -1", "description": "Run the unit tests again"}},
+            {"wait": 2, "text": "Fixed. `parse_date` now accepts UTC timestamps like `2026-03-01T09:30:00Z`, "
+                     "and all 6 tests pass."},
+        ],
+    },
+    "Review the uncommitted changes in billing/ and list anything risky.": {
+        "title": "Review billing changes",
+        "steps": [
+            {"text": "Let me look at what changed.",
+             "bash": {"command": "git diff --stat -- billing/", "description": "Summarize the billing diff"}},
+            {"text": "Reading through `billing/invoice.py`: the rounding change moves from per-line to per-invoice totals, "
+                     "which can shift amounts by a cent on multi-line invoices. ", "wait": 900},
+            {"text": "Done."},
+        ],
+    },
+    "Copy the 1.4.0 build to the shared release folder /var/tmp/acme-releases.": {
+        "title": "Publish 1.4.0 build",
+        "steps": [
+            {"text": "Copying the build into the release folder.",
+             "bash": {"command": DEMO_RELEASE_COMMAND, "description": "Copy the build to the release folder"}},
+            {"text": "The sandbox blocks writes outside the workspace, so I'll ask for permission.",
+             "bash": {"command": DEMO_RELEASE_COMMAND, "description": "Copy the build to the release folder",
+                      "sandbox_permissions": "danger-full-access",
+                      "justification": "The shared release folder is outside the workspace."}},
+            {"text": "Copied the 1.4.0 build to `/var/tmp/acme-releases/1.4.0`."},
+        ],
+    },
+}
+
+
+def demo_for(body):
+    """The demo script and the step this call answers, if the turn started with a demo prompt."""
+    messages = body.get("messages", [])
+    for i in range(len(messages) - 1, -1, -1):
+        m = messages[i]
+        if m.get("role") != "user":
+            continue
+        content = m.get("content")
+        texts = [content] if isinstance(content, str) else [p.get("text", "") for p in content or [] if p.get("type") == "text"]
+        demo = next((DEMOS[t.strip()] for t in texts if t.strip() in DEMOS), None)
+        if demo:
+            calls = sum(1 for a in messages[i + 1:] if a.get("role") == "assistant"
+                        for p in a.get("content") or [] if isinstance(p, dict) and p.get("type") == "tool_use")
+            return demo, min(calls, len(demo["steps"]) - 1)
+    return None, 0
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -83,6 +146,14 @@ class H(BaseHTTPRequestHandler):
         if not title and slow:
             time.sleep(int(slow.group(1) or 4))
         text = "Mock title" if title else f"MOCK-REPLY: {prompt[:80]}"
+        if title:
+            text = next((d["title"] for k, d in DEMOS.items() if k.encode() in raw), text)
+        demo, step = (None, 0) if title else demo_for(body)
+        if demo:
+            step = demo["steps"][step]
+            time.sleep(step.get("wait", 0))
+            blocks = ([("text", step["text"])] if "text" in step else []) + ([("tool_use", ("bash", step["bash"]))] if "bash" in step else [])
+            return self.reply(blocks, pace=0.04)
         tool_input, tool_name = None, "bash"
         if not title and "[[approve]]" in prompt:
             answered = pending_tool_use(body)
@@ -104,6 +175,11 @@ class H(BaseHTTPRequestHandler):
                                              "options": [{"label": "red"}, {"label": "blue"}]}]}
             else:
                 text = f"MOCK-REPLY: answer was {tool_result_text(body)[:200]}"
+        pace = 0.15 if "[[stream]]" in prompt else 0.0
+        self.reply([("text", text)] if tool_input is None else [("tool_use", (tool_name, tool_input))], pace)
+
+    def reply(self, blocks, pace=0.0):
+        """Stream content blocks (("text", str) or ("tool_use", (name, input))); text in word chunks `pace` s apart."""
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.end_headers()
@@ -113,17 +189,19 @@ class H(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         ev("message_start", {"type": "message_start", "message": {"id": "msg_1", "type": "message", "role": "assistant", "model": "mock", "content": [], "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 0}}})
-        if tool_input is None:
-            ev("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})
-            ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": text}})
-            stop = "end_turn"
-        else:
-            ev("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": f"toolu_{time.time_ns()}", "name": tool_name, "input": {}}})
-            ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": json.dumps(tool_input)}})
-            stop = "tool_use"
-        ev("content_block_stop", {"type": "content_block_stop", "index": 0})
+        for index, (kind, value) in enumerate(blocks):
+            if kind == "text":
+                ev("content_block_start", {"type": "content_block_start", "index": index, "content_block": {"type": "text", "text": ""}})
+                for chunk in re.findall(r"\S+\s*", value) if pace else [value]:
+                    ev("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {"type": "text_delta", "text": chunk}})
+                    time.sleep(pace)
+            else:
+                name, tool_input = value
+                ev("content_block_start", {"type": "content_block_start", "index": index, "content_block": {"type": "tool_use", "id": f"toolu_{time.time_ns()}", "name": name, "input": {}}})
+                ev("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {"type": "input_json_delta", "partial_json": json.dumps(tool_input)}})
+            ev("content_block_stop", {"type": "content_block_stop", "index": index})
+        stop = "tool_use" if any(kind == "tool_use" for kind, _ in blocks) else "end_turn"
         ev("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop}, "usage": {"output_tokens": 2}})
         ev("message_stop", {"type": "message_stop"})
-
 
 ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()

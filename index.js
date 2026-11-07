@@ -11,7 +11,7 @@ import { basename, join, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { Renderer, crlf, oneLine, osc, style } from './render.js'
+import { Renderer, crlf, oneLine, osc, style, windowTitle } from './render.js'
 
 export const name = 'herdr-bridge'
 
@@ -158,7 +158,14 @@ export function apply(ctx, config = {}) {
     get short() { return this.sessionId.replace(/^session-/, '').slice(0, 8) }
     get mirrored() { return this.conns.size > 0 || this.launching }
 
-    out(s) { if (s) for (const socket of this.conns.keys()) send(socket, { t: 'out', d: s }) }
+    // A terminal that is still being caught up queues live output until its history is out.
+    out(s) {
+      if (!s) return
+      for (const [socket, conn] of this.conns) {
+        if (conn.queue) conn.queue.push(s)
+        else send(socket, { t: 'out', d: s })
+      }
+    }
     set(state, extra = {}) {
       this.status = { state, ...extra }
       this.out(osc(this.status, this.title))
@@ -167,7 +174,7 @@ export function apply(ctx, config = {}) {
       title = oneLine(title, 80)
       if (!title || title === this.title) return
       this.title = title
-      this.out(osc(this.status, this.title))
+      this.out(osc(this.status, this.title) + windowTitle(this.title))
       if (this.terminal) runHc(['label', this.terminal, `dsh.title=${title}`])
     }
 
@@ -182,7 +189,7 @@ export function apply(ctx, config = {}) {
     }
 
     /** Recent conversation, rendered like the live one, for a terminal that just joined. */
-    async history(socket) {
+    async history(socket, auto) {
       try {
         const page = await sessions?.sessionController.page(
           { address: { kind: 'session', sessionId: this.sessionId }, maxMessages: HISTORY_MESSAGES },
@@ -191,7 +198,8 @@ export function apply(ctx, config = {}) {
         replay.cols = this.renderer.cols
         // History records wrap the session event: { type: 'event', event }.
         const text = (page?.records ?? []).map(record => replay.event(record?.event ?? record)).join('')
-        if (text) send(socket, { t: 'out', d: text + crlf(`${style.dim('─── earlier conversation above ───')}\n`) })
+        // An automatic mirror opens on the session's first run: its history is the turn in flight.
+        if (text) send(socket, { t: 'out', d: auto ? text : text + crlf(`${style.dim('─── earlier conversation above ───')}\n`) })
       } catch (error) {
         log('history failed', this.sessionId, error?.message ?? error)
       }
@@ -199,7 +207,9 @@ export function apply(ctx, config = {}) {
 
     async attach(socket, hello, origin) {
       this.launching = false
-      this.conns.set(socket, { auto: Boolean(hello.auto) })
+      const conn = { auto: Boolean(hello.auto), queue: [] }
+      const inFlight = this.renderer.inFlight()
+      this.conns.set(socket, conn)
       if (hello.term) {
         const changed = this.terminal !== hello.term
         this.terminal = hello.term
@@ -208,7 +218,7 @@ export function apply(ctx, config = {}) {
       if (hello.cols) this.renderer.cols = hello.cols
       socket.on('close', () => this.conns.delete(socket))
       send(socket, { t: 'welcome', v: PROTOCOL, session: this.sessionId, origin, grace })
-      send(socket, { t: 'out', d: osc(this.status, this.title) })
+      send(socket, { t: 'out', d: osc(this.status, this.title) + windowTitle(this.title) })
       const feed = inputParser({
         submit: text => this.submit(text),
         cancel: () => this.cancel(),
@@ -220,8 +230,12 @@ export function apply(ctx, config = {}) {
       })
       if (!hello.resumed) {
         send(socket, { t: 'out', d: crlf(`${style.bold(this.title)} ${style.dim(`· dsh ${this.short} · ${this.cwd ?? ''}`)}\n${style.dim('Enter sends · Esc cancels')}\n`) })
-        if (hello.mode === 'attach') await this.history(socket)
+        if (hello.mode === 'attach') await this.history(socket, conn.auto)
+        // Text streamed before this terminal joined is not in the history yet.
+        if (inFlight) send(socket, { t: 'out', d: inFlight })
       }
+      for (const s of conn.queue) send(socket, { t: 'out', d: s })
+      conn.queue = null
     }
 
     submit(text) {

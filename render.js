@@ -28,6 +28,9 @@ export function osc({ state, msg, kind }, title) {
   return `\x1b]7501;${parts.join(':')}\x1b\\`
 }
 
+/** The terminal's own title (OSC 2): Herdr App names agent rows and tabs after it, as it does for TUI agents. */
+export const windowTitle = title => `\x1b]2;${String(title).replace(/[\x00-\x1f\x7f]/g, '')}\x1b\\`
+
 const textOf = content => (Array.isArray(content) ? content : [])
   .filter(p => p?.type === 'text' && typeof p.text === 'string')
   .map(p => p.text)
@@ -58,6 +61,12 @@ export class Renderer {
     this.streamed = new Set()
     this.turnStarted = new Map()
     this.inText = false
+    this.partial = '' // the streamed text of the step in flight
+  }
+
+  /** The step in flight as a terminal that joins now would have seen it, so it can follow on. */
+  inFlight() {
+    return this.inText ? `${style.cyan('⏺')} ${crlf(this.partial.replace(/\n/g, '\n  '))}` : ''
   }
 
   /** A durable session event (live or replayed from history) to terminal text. */
@@ -114,17 +123,20 @@ export class Renderer {
     if (frame?.type === 'start') {
       this.step = `${frame.turn}:${frame.step}`
       this.inText = false
+      this.partial = ''
       return ''
     }
     if (frame?.type === 'chunk' && frame.chunk?.type === 'text-delta' && frame.chunk.text) {
       const lead = this.inText ? '' : `${style.cyan('⏺')} `
       this.inText = true
+      this.partial += frame.chunk.text
       if (this.step) this.streamed.add(this.step)
       return lead + crlf(frame.chunk.text.replace(/\n/g, '\n  '))
     }
     if (frame?.type === 'end') {
       const close = this.inText ? '\r\n' : ''
       this.inText = false
+      this.partial = ''
       return close
     }
     return ''

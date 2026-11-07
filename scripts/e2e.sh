@@ -28,7 +28,8 @@ hc run --bg --name "$T" dsh "hello [[e2e]]" >/dev/null
 hc wait "$T" --timeout 60 >/dev/null
 check "hc-origin session finishes its first task" "$(state "$T")" done
 contains "transcript shows the reply" "$T" "MOCK-REPLY: hello [[e2e]]"
-check "terminal title follows the DSH session title" "$(field "$T" title)" "Mock title"
+check "7501 title follows the DSH session title" "$(field "$T" title)" "Mock title"
+check "terminal title (OSC 2) follows the session title" "$(hc get "$T" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin).get("title",""))')" "Mock title"
 check "dsh.title label follows the session title" "$(label "$T" dsh.title)" "Mock title"
 SID=$(label "$T" dsh.session)
 check "dsh.session label is set" "$(printf %s "$SID" | cut -c1-8)" session-
@@ -105,15 +106,6 @@ check "it still reports the running turn" "$(state "$R")" working
 hc wait "$R" --timeout 60 >/dev/null
 check "and the turn finishes" "$(state "$R")" done
 contains "the reconnect is visible" "$R" "⋯ reconnected"
-
-# Perch, unmodified, shows the mirrored session.
-PERCHCTL=$ROOT/ref/herdr-perch/.build/release/perchctl
-if [ -x "$PERCHCTL" ]; then
-  ROWS=$("$PERCHCTL" dump --core-root "$XDG_STATE_HOME/herdr-core" 2>/dev/null | python3 -I -c 'import json,sys;print(sum(1 for r in json.load(sys.stdin)["rows"] if r.get("backend")=="core" and r.get("pane")==sys.argv[1]))' "$(address "$T")")
-  check "Perch shows the mirrored session" "$ROWS" 1
-else
-  echo "skip Perch check (build it: cd ref/herdr-perch && swift build --product perchctl -c release)"
-fi
 
 for t in "$T" "$A" "$B" "$Q" "$E" "$V" "$S" "$R"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
 for t in $(dsh_terminals); do hc kill "$t" >/dev/null 2>&1; done

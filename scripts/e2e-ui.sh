@@ -1,7 +1,7 @@
 #!/bin/sh
 # UI-side end-to-end checks: a browser (ego-browser) plays the person in DSH Desktop against the
 # isolated `dsh web`, and hc plays the Herdr agent. Run scripts/dev.sh up first.
-# Covers: Desktop-origin sessions mirrored on first run, /herdr, approvals and questions answered
+# Covers: Desktop-origin sessions mirrored on first run (nothing streamed before the mirror joins is lost), /herdr, approvals and questions answered
 # from either side (the other side's prompt is withdrawn), and a Herdr agent taking a session over.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -111,6 +111,19 @@ hc run --bg --name "ui-taker-$SHORT" dsh-hc attach "$SHORT" >/dev/null; sleep 2
 check "takeover closes the automatic mirror" "$(hc get "$NEW" --json >/dev/null 2>&1 && echo still-there || echo gone)" gone
 check "and the taker reports the session" "$(state "ui-taker-$SHORT")" done
 hc kill "ui-taker-$SHORT" >/dev/null 2>&1; hc rm "ui-taker-$SHORT" >/dev/null 2>&1
+
+# 7. A reply already streaming when the mirror opens arrives whole (nothing lost before it joined).
+printf '%s\n' "$(dsh_names)" > "$ISO/names.before"
+ui '
+await page.keyboard.press("Alt+Meta+n");
+await page.waitForTimeout(1000);
+await send("a reply that streams word by word while its mirror opens [[stream]]");
+await page.waitForFunction(() => document.body.innerText.includes("while its mirror opens"), undefined, { timeout: 30000 });
+' >/dev/null
+sleep 1
+STREAMED=$(dsh_names | grep -vxF -f "$ISO/names.before" | head -1)
+hc wait "$STREAMED" --timeout 60 >/dev/null
+if hc read "$STREAMED" --lines 40 | grep -qF "MOCK-REPLY: a reply that streams word by word while its mirror opens"; then check "a reply streaming before the mirror joined arrives whole" yes yes; else check "a reply streaming before the mirror joined arrives whole" no yes; fi
 
 [ $FAILED = 0 ] && echo "all passed" || echo "some checks failed"
 exit $FAILED
