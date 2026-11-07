@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Herdr 桥接",
-    "description": "把 DSH 会话接进 Herdr：在 Herdr App 里看到它们，由 Herdr Agent 驱动，审批在两边都能回答。",
+    "description": "将 DSH 会话接入 Herdr，支持状态同步、Agent 操控与双端审批。",
     "detail": "docs/DETAIL.zh.md"
   }
 }
