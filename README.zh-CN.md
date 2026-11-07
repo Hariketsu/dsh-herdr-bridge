@@ -35,7 +35,7 @@ Desktop 和 `dsh web` 同一时间只能有一个接入 Herdr（见已知限制�
 
 1. 装进你使用的 DSH profile。Desktop 用 `desktop`，要先完全退出 Desktop（⌘Q）；Web 用 `web`，要先停掉 `dsh web`：
    ```sh
-   dsh plugin --profile desktop add dsh-herdr-bridge --ignore-scripts --config.auto-install-peers=false   # 或 --profile web
+   dsh plugin --profile desktop add dsh-herdr-bridge   # 或 --profile web
    ```
 2. 重新打开 Desktop 或启动 `dsh web`。插件加载时会生成命令 `~/.dsh/herdr-bridge/bin/dsh-hc`。
 3. 把它加进 PATH（下文的示例都假设已经加好），然后执行 `install-template`。它安装 hc template，让 `hc run dsh "任务"` 可用；装了 Herdr App 的话，还会在 Herdr App 的程序表里加上 DSH 的名字和图标，DSH 会话在 Agent 列表里就不再是通用图标：

@@ -35,7 +35,7 @@ Platforms: tested on macOS only. Windows and Linux are implemented but untested.
 
 1. Add the plugin to the DSH profile you use: `desktop` for Desktop (quit Desktop fully with ⌘Q first), or `web` for `dsh web` (stop it first):
    ```sh
-   dsh plugin --profile desktop add dsh-herdr-bridge --ignore-scripts --config.auto-install-peers=false   # or --profile web
+   dsh plugin --profile desktop add dsh-herdr-bridge   # or --profile web
    ```
 2. Reopen Desktop or start `dsh web`. When the plugin loads, it creates the command `~/.dsh/herdr-bridge/bin/dsh-hc`.
 3. Add it to your PATH (the examples below assume you did), then run `install-template`. This installs the hc template so that `hc run dsh "task"` works. If Herdr App is installed, it also adds DSH's name and icon to Herdr App's program table, so DSH sessions don't show a generic icon in the agents list:
