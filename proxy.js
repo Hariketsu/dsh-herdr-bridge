@@ -72,6 +72,7 @@ function terminal(first) {
   let live = false
   let leaving = false
   let deadline = 0
+  let status = null // the last OSC 7501 report shown, handed back on reconnect
 
   if (process.stdin.isTTY) process.stdin.setRawMode(true)
   out.write('\x1b[?2004h') // bracketed paste: hc send arrives as one paste
@@ -100,6 +101,7 @@ function terminal(first) {
         if (again) out.write(dim('⋯ reconnected\r\n'))
       } else if (message.t === 'out') {
         out.write(message.d)
+        status = lastStatus(message.d) ?? status
       } else if (message.t === 'bye') {
         if (message.reason) out.write(dim(`\r\n⋯ ${message.reason}\r\n`))
         leave(0)
@@ -127,13 +129,21 @@ function terminal(first) {
         return leave(0)
       }
       setTimeout(() => {
-        connect({ mode: 'attach', session: welcome.session, origin: welcome.origin, resumed: true })
+        connect({ mode: 'attach', session: welcome.session, origin: welcome.origin, resumed: true, status })
       }, 1000)
     })
   }
 
   if (!SOCKET) fail('DSH_HERDR_SOCKET is not set; run dsh-hc through its launcher')
   connect(first)
+}
+
+/** The last OSC 7501 report in a chunk of output, as { state, msg }. */
+function lastStatus(text) {
+  const reports = [...text.matchAll(/\x1b\]7501;([^\x07\x1b]*)/g)]
+  if (!reports.length) return null
+  const fields = Object.fromEntries(reports.at(-1)[1].split(':').map(f => [f.slice(0, f.indexOf('=')), f.slice(f.indexOf('=') + 1)]))
+  return { state: fields.state, msg: fields.msg ? Buffer.from(fields.msg, 'base64').toString() : '' }
 }
 
 function templateDir() {

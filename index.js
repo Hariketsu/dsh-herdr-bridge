@@ -146,6 +146,7 @@ export function apply(ctx, config = {}) {
       this.title = basename(cwd || '') || 'dsh'
       this.terminal = '' // hc address of the terminal mirroring it
       this.status = { state: agents?.get(sessionId)?.status === 'running' ? 'working' : 'idle' }
+      this.statusSeen = false // whether this instance has seen the session change state itself
       this.lastEnd = null
       this.waiter = null // a pending answer typed in hc
       this.conns = new Map() // socket → { auto }
@@ -168,6 +169,7 @@ export function apply(ctx, config = {}) {
     }
     set(state, extra = {}) {
       this.status = { state, ...extra }
+      this.statusSeen = true
       this.out(osc(this.status, this.title))
     }
     retitle(title) {
@@ -207,6 +209,12 @@ export function apply(ctx, config = {}) {
 
     async attach(socket, hello, origin) {
       this.launching = false
+      // After a plugin reload an idle session can't tell how its last turn ended; the terminal
+      // that comes back remembers what it last showed (done or error), so keep that.
+      const kept = hello.status
+      if (hello.resumed && !this.statusSeen && this.status.state === 'idle' && ['done', 'error'].includes(kept?.state)) {
+        this.status = { state: kept.state, ...(kept.msg ? { msg: oneLine(kept.msg) } : {}) }
+      }
       const conn = { auto: Boolean(hello.auto), queue: [] }
       const inFlight = this.renderer.inFlight()
       this.conns.set(socket, conn)

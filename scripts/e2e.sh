@@ -97,12 +97,17 @@ SCWD=$(dsh-hc ls --days 1 --json | python3 -I -c 'import json,sys;print(next((i[
 check "a subfolder session keeps its folder" "$(basename "$SCWD")" sub
 
 # A reload drops the plugin's connections; the terminal stays, reconnects, and keeps its address.
+F=e2e-f-$RUN
+hc run --bg --name "$F" dsh "fails before the reload [[fail]]" >/dev/null
+hc wait "$F" --timeout 60 >/dev/null
 R=e2e-r-$RUN
 hc run --bg --name "$R" dsh "running across a reload [[slow:12]]" >/dev/null; sleep 1
 BEFORE=$(address "$R")
 "$ROOT/scripts/dev.sh" reload; sleep 5
 check "a terminal survives a plugin reload with the same address" "$(address "$R"):$(hc get "$R" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["state"])')" "$BEFORE:live"
 check "it still reports the running turn" "$(state "$R")" working
+check "a finished session stays done across the reload" "$(state "$A")" done
+check "a failed session stays error across the reload" "$(state "$F")" error
 hc wait "$R" --timeout 60 >/dev/null
 check "and the turn finishes" "$(state "$R")" done
 contains "the reconnect is visible" "$R" "⋯ reconnected"
@@ -120,7 +125,7 @@ HERDR_APP_HOME=$APPHOME dsh-hc install-template >/dev/null
 check "and keeps a dsh entry the person changed" "$(prog dsh)" "My DSH"
 rm -rf "$APPHOME"
 
-for t in "$T" "$A" "$B" "$Q" "$E" "$V" "$S" "$R"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
+for t in "$T" "$A" "$B" "$Q" "$E" "$V" "$S" "$R" "$F"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
 for t in $(dsh_terminals); do hc kill "$t" >/dev/null 2>&1; done
 [ $FAILED = 0 ] && echo "all passed" || echo "some checks failed"
 exit $FAILED
