@@ -37,17 +37,12 @@ Platforms: tested on macOS only. Windows and Linux are implemented but untested.
    ```sh
    dsh plugin --profile desktop add dsh-herdr-bridge   # or --profile web
    ```
-2. Reopen Desktop or start `dsh web`. When the plugin loads, it creates the command `~/.dsh/herdr-bridge/bin/dsh-hc`.
-3. Add it to your PATH (the examples below assume you did), then run `install-template`. This installs the hc template so that `hc run dsh "task"` works. If Herdr App is installed, it also adds DSH's name and icon to Herdr App's program table, so DSH sessions don't show a generic icon in the agents list:
-   ```sh
-   fish_add_path ~/.dsh/herdr-bridge/bin                # fish; for zsh/bash add export PATH="$HOME/.dsh/herdr-bridge/bin:$PATH" to your rc file
-   dsh-hc install-template                              # writes the hc template; with Herdr App, also its programs.json and icon
-   ```
+2. Reopen Desktop or start `dsh web`. That's all: when the plugin loads, it installs the hc template, so Herdr agents can run `hc run dsh "task"`, and, if you use Herdr App, DSH's name and icon there.
 
 **Check that it works:**
 
 ```sh
-dsh-hc ls          # recent DSH sessions (prints "no DSH sessions in that period" before you have any)
+hc templates       # lists dsh
 ```
 
 Then send any message in DSH. A `dsh-<short id>` terminal should appear in `hc ls`.
@@ -72,10 +67,12 @@ Where the new session goes depends on its folder. If the folder is exactly one o
 **3. Take over an existing session.**
 
 ```sh
-dsh-hc ls --days 7                                  # session id, title, folder, and whether it's already in hc
-hc run --bg --name login dsh-hc attach 3b729fc9     # by id, id prefix, or part of the title
-hc read login                                       # the earlier conversation first, then anything new
+~/.dsh/herdr-bridge/bin/dsh-hc ls --days 7                         # session id, title, folder, and whether it's already in hc
+hc run --bg --name login ~/.dsh/herdr-bridge/bin/dsh-hc attach 3b729fc9   # by id, id prefix, or part of the title
+hc read login                                                       # the earlier conversation first, then anything new
 ```
+
+`dsh-hc` is the small command the plugin creates; it doesn't need to be on your PATH. Herdr agents find its full path in the `dsh` template's description (`hc templates`).
 
 If the session already has an automatic `dsh-<short id>` terminal, that terminal exits and the one taking over replaces it.
 
@@ -135,9 +132,8 @@ Start with the log, `~/.dsh/herdr-bridge/bridge.log`.
 |---|---|
 | A session you started in DSH shows in `hc ls` but not in Herdr App | Check `herdrPlacement` isn't `none`. Herdr App only shows terminals placed in a space; terminals from an older plugin version are placed when they reconnect |
 | A session you're using in DSH isn't in `hc ls` | The log, for plugin load or terminal start failures. Whether DSH can find `hc`: Desktop uses your login shell's PATH and `dsh web` uses the PATH of the shell that started it; if needed, set `hc` in the config. Whether Desktop and `dsh web` are both running (see Known limitations) |
-| `dsh-hc: command not found` | PATH isn't set; use `~/.dsh/herdr-bridge/bin/dsh-hc` directly. If that file doesn't exist, the plugin didn't load |
-| `hc run dsh …` can't find the template | Run `dsh-hc install-template` |
-| DSH sessions show a generic robot icon in Herdr App | Start Herdr App once, then run `dsh-hc install-template`. It reports whether it wrote the `dsh` entry to `programs.json` or kept one that was already there |
+| `hc run dsh …` can't find the template, or `~/.dsh/herdr-bridge/bin/dsh-hc` doesn't exist | The plugin didn't load; check the log. A `dsh` template you wrote yourself is never replaced; delete it to get ours, or run `~/.dsh/herdr-bridge/bin/dsh-hc install-template` |
+| DSH sessions show a generic robot icon in Herdr App | Herdr App had never been started when the plugin loaded: restart DSH, or run `~/.dsh/herdr-bridge/bin/dsh-hc install-template`. A `dsh` entry already in `programs.json` is kept |
 | The terminal shows "disconnected → reconnected" | The plugin reloaded (for example, you changed a setting in DSH). This is expected, and the address stays the same |
 | A `dsh-*` terminal exits suddenly | DSH quit, or the plugin didn't come back within `reconnectGraceSeconds`. Reopen DSH; the session is mirrored again the next time it runs |
 | A terminal reports a protocol version mismatch | It's still running the proxy from before a plugin upgrade. Close it and `attach` again |
@@ -166,7 +162,7 @@ Installing from source, the dev loop and the isolated test environment are in [d
 ```sh
 scripts/dev.sh up          # isolated world: mock LLM + isolated hc core + isolated dsh web (Desktop stand-in)
 scripts/dev.sh reload      # hot-reload the plugin
-scripts/e2e.sh             # 37 hc-side checks
+scripts/e2e.sh             # 39 hc-side checks
 scripts/e2e-ui.sh          # 14 UI-side checks (ego-browser)
 scripts/dev.sh down
 scripts/desktop.sh reload  # hot-reload changes into your real Desktop (only touches the herdr-bridge entry in cordis.patch.yml; backs it up the first time)

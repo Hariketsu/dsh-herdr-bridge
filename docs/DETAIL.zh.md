@@ -2,4 +2,4 @@
 
 要选择会话在 Herdr App 里放在哪里，点开下面的 **Herdr 桥接** 组件。
 
-安装后的准备（把 `dsh-hc` 加进 PATH，执行一次 `dsh-hc install-template`）和其他说明见[完整文档](https://github.com/Hariketsu/dsh-herdr-bridge/blob/main/README.zh-CN.md)。
+装好就能用，不需要别的准备。更多说明见[完整文档](https://github.com/Hariketsu/dsh-herdr-bridge/blob/main/README.zh-CN.md)。

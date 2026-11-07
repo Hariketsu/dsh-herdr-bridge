@@ -2,4 +2,4 @@ Each DSH session you run becomes an hc terminal in Herdr. Herdr App shows its st
 
 To choose where sessions show in Herdr App, open the **Herdr Bridge** component below.
 
-Setup (adding `dsh-hc` to your PATH and running `dsh-hc install-template` once) and everything else are in the [full guide](https://github.com/Hariketsu/dsh-herdr-bridge#readme).
+There's nothing else to set up. More in the [full guide](https://github.com/Hariketsu/dsh-herdr-bridge#readme).

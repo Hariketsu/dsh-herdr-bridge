@@ -39,8 +39,8 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - 每个代理实际物理占用约 13–14 MB（`footprint` 实测；RSS 约 50 MB，其中大部分是共享的 Electron 代码）。
 - **启动器**：
   - 插件加载时生成 `bin/dsh-hc`（Windows 上是 `.cmd`），用 `ELECTRON_RUN_AS_NODE=1` 运行 Desktop 自带的 Node，不依赖用户另外装 Node。
-  - hc template 由 `dsh-hc install-template` 按当前机器的路径生成。
-  - 同一条命令还往 Herdr App 的用户程序表 `programs.json` 里加一个 `dsh` 条目（名字 DSH、单色图标随包发布），因为 Herdr App 只认内置的程序和这张表。已有的 `dsh` 条目不覆盖。
+  - 插件每次加载都按当前机器的路径写 hc template（`install.js`），用户不用做任何安装步骤；template 的描述里带着启动器的完整路径，Herdr Agent 用 `hc templates` 就知道怎么列出和接管会话，所以 `dsh-hc` 不需要在 PATH 上。用户自己写的 `dsh` template（不含 `dsh-herdr-bridge` 字样）不会被覆盖。`dsh-hc install-template` 手动执行同一段代码。
+  - 同样在加载时往 Herdr App 的用户程序表 `programs.json` 里加一个 `dsh` 条目（名字 DSH、单色图标随包发布），因为 Herdr App 只认内置的程序和这张表。已有的 `dsh` 条目不覆盖。
 - **重连**：
   - 插件热重载、升级，或用户在 Desktop 里改了设置导致 profile 重组时，代理会在宽限期内重连。
   - 重连后 hc 地址不变，父子关系不变。
@@ -118,7 +118,7 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 
 最近一次全部通过：2026-11-07，macOS，版本组合见 README 的“要求”。没有 CI，测试在本机手动执行。
 
-- `scripts/e2e.sh`（37 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
+- `scripts/e2e.sh`（39 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
   - 新建会话、标题（终端标题、7501、标签）、`send --wait`、interrupt、模型报错。
   - 审批从 hc 回答、blocked 时 hc 拒绝普通 send、blocked 时 interrupt、提问。
   - `DSH_HC_TERMINAL`、skill、工具调用的渲染。
