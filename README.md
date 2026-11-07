@@ -15,7 +15,7 @@ The plugin runs inside DSH's own process. It needs no second copy of DSH and cha
 
 ## What it looks like
 
-![Three DSH sessions in Herdr App: one waiting for approval, one working, one finished; on the right, the finished session's conversation](docs/media/herdr-app.webp)
+![Three DSH sessions in Herdr App: one waiting for approval, one working, one finished; on the right, the finished session's conversation](https://raw.githubusercontent.com/Hariketsu/dsh-herdr-bridge/main/docs/media/herdr-app.webp)
 
 Three DSH sessions in Herdr App, each in a different state. On the right is one session as it looks in its hc terminal: the prompt, the reply, tool calls with their descriptions, and how long the turn took, in the same format as native TUI agents.
 
@@ -85,7 +85,7 @@ If the session already has an automatic `dsh-<short id>` terminal, that terminal
 
 When a session waits for an approval or a question, DSH shows its dialog as usual. The hc terminal shows the same question, with status `blocked`.
 
-![Left: the approval dialog in DSH Web. Right: the same session in Herdr App, waiting on the same approval](docs/media/approval.webp)
+![Left: the approval dialog in DSH Web. Right: the same session in Herdr App, waiting on the same approval](https://raw.githubusercontent.com/Hariketsu/dsh-herdr-bridge/main/docs/media/approval.webp)
 
 Answering from hc needs `--force`:
 
@@ -114,15 +114,18 @@ General hc usage comes from `~/.agents/skills/herdr-core`, which DSH discovers a
 
 ## Configuration
 
-All optional, under the `herdr-bridge` entry in `~/.dsh/profiles/<profile>/cordis.patch.yml`:
+Open **Plugins → dsh-herdr-bridge → Configure** in DSH to choose where sessions show in Herdr App; changes apply without a restart. Everything can also be set, all optional, under the `herdr-bridge` entry in `~/.dsh/profiles/<profile>/cordis.patch.yml`:
 
 ```yaml
 - id: herdr-bridge
   config:
+    herdrPlacement: folder      # where Herdr App shows sessions started in DSH: folder (default), dsh, or none
+    herdrSpace: sp123           # a fixed Herdr App space id; overrides herdrPlacement
     reconnectGraceSeconds: 30   # how long a terminal waits for the plugin to come back before exiting (default 30)
-    herdrSpace: s3              # label terminals herdr.space=<id> so they show in that Herdr App space
     hc: /path/to/hc             # the hc executable; default: hc on PATH
 ```
+
+Herdr App only shows hc terminals placed in one of its spaces. With `folder`, a session started in DSH joins the Herdr App space that already has a terminal in the same folder; if there is none, Herdr App opens a new space for that folder. With `dsh`, all of them share one space, named after the first session's folder until you rename it in Herdr App. With `none`, they stay out of Herdr App but still show in `hc ls` and other clients. Sessions a Herdr agent starts with `hc run dsh` show under that agent either way.
 
 ## Troubleshooting
 
@@ -130,6 +133,7 @@ Start with the log, `~/.dsh/herdr-bridge/bridge.log`.
 
 | Symptom | Check |
 |---|---|
+| A session you started in DSH shows in `hc ls` but not in Herdr App | Check `herdrPlacement` isn't `none`. Herdr App only shows terminals placed in a space; terminals from an older plugin version are placed when they reconnect |
 | A session you're using in DSH isn't in `hc ls` | The log, for plugin load or terminal start failures. Whether DSH can find `hc`: Desktop uses your login shell's PATH and `dsh web` uses the PATH of the shell that started it; if needed, set `hc` in the config. Whether Desktop and `dsh web` are both running (see Known limitations) |
 | `dsh-hc: command not found` | PATH isn't set; use `~/.dsh/herdr-bridge/bin/dsh-hc` directly. If that file doesn't exist, the plugin didn't load |
 | `hc run dsh …` can't find the template | Run `dsh-hc install-template` |
@@ -163,7 +167,7 @@ Installing from source, the dev loop and the isolated test environment are in [d
 scripts/dev.sh up          # isolated world: mock LLM + isolated hc core + isolated dsh web (Desktop stand-in)
 scripts/dev.sh reload      # hot-reload the plugin
 scripts/e2e.sh             # 37 hc-side checks
-scripts/e2e-ui.sh          # 13 UI-side checks (ego-browser)
+scripts/e2e-ui.sh          # 14 UI-side checks (ego-browser)
 scripts/dev.sh down
 scripts/desktop.sh reload  # hot-reload changes into your real Desktop (only touches the herdr-bridge entry in cordis.patch.yml; backs it up the first time)
 scripts/demo-media.py      # regenerate the README media from a scripted, fully isolated demo

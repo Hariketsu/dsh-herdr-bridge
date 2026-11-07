@@ -15,7 +15,7 @@
 
 ## 效果
 
-![Herdr App 里的三个 DSH 会话：一个等待审批，一个正在工作，一个已完成；右侧是已完成会话的对话](docs/media/herdr-app.webp)
+![Herdr App 里的三个 DSH 会话：一个等待审批，一个正在工作，一个已完成；右侧是已完成会话的对话](https://raw.githubusercontent.com/Hariketsu/dsh-herdr-bridge/main/docs/media/herdr-app.webp)
 
 Herdr App 里的三个 DSH 会话，状态各不相同。右侧是其中一个会话在 hc 终端里的样子：提示、回复、带描述的工具调用和回合用时，格式和原生 TUI Agent 一样。
 
@@ -85,7 +85,7 @@ hc read login                                       # 先看到之前的对话�
 
 会话等待审批或提问时，DSH 界面照常弹出对话框，hc 终端里也显示同一个问题，状态为 `blocked`。
 
-![左边是 DSH Web 里的审批对话框，右边是 Herdr App 里同一个会话在等待同一个审批](docs/media/approval.webp)
+![左边是 DSH Web 里的审批对话框，右边是 Herdr App 里同一个会话在等待同一个审批](https://raw.githubusercontent.com/Hariketsu/dsh-herdr-bridge/main/docs/media/approval.webp)
 
 在 hc 侧回答必须加 `--force`：
 
@@ -114,15 +114,18 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 
 ## 配置
 
-写在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `herdr-bridge` 条目下，全部可选：
+在 DSH 里打开 **插件 → dsh-herdr-bridge → 配置**，就能选择会话在 Herdr App 里放在哪里，改完不用重启就生效。所有设置也都可以写在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 的 `herdr-bridge` 条目下，全部可选：
 
 ```yaml
 - id: herdr-bridge
   config:
+    herdrPlacement: folder      # 在 DSH 里发起的会话放进 Herdr App 的哪个 space：folder（默认）、dsh 或 none
+    herdrSpace: sp123           # 固定的 Herdr App space id；填了就以它为准
     reconnectGraceSeconds: 30   # 插件断开后，终端等待重连的秒数，超时退出（默认 30）
-    herdrSpace: s3              # 给终端打 herdr.space 标签，在 Herdr App 的这个 space 里显示
     hc: /path/to/hc             # hc 可执行文件，默认是 PATH 上的 hc
 ```
+
+Herdr App 只显示放进它某个 space 的 hc 终端。`folder`：在 DSH 里发起的会话，加入 Herdr App 里已经有终端在同一文件夹的那个 space；没有的话，Herdr App 为这个文件夹新开一个 space。`dsh`：所有会话共用一个 space，名字取第一个会话的文件夹，你在 Herdr App 里改名后就固定下来。`none`：不放进 Herdr App，但 `hc ls` 和其他客户端照样能看到。Herdr Agent 用 `hc run dsh` 发起的会话，无论哪种设置，都显示在那个 Agent 下面。
 
 ## 故障排查
 
@@ -130,6 +133,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 
 | 现象 | 检查 |
 |---|---|
+| 在 DSH 里发起的会话 `hc ls` 里有，但 Herdr App 里没有 | 检查 `herdrPlacement` 不是 `none`。Herdr App 只显示放进 space 的终端；旧版插件开出的终端会在重连时补上 |
 | DSH 里在用的会话，`hc ls` 里没有 | 日志里有没有插件加载和开终端失败的记录；DSH 进程能否找到 `hc`（Desktop 用登录 shell 的 PATH，`dsh web` 用启动它的 shell 的 PATH；找不到就在配置里设 `hc`）；是否同时开着 Desktop 和 `dsh web`（见已知限制） |
 | `dsh-hc: command not found` | PATH 没加好；直接用 `~/.dsh/herdr-bridge/bin/dsh-hc`。这个文件不存在说明插件没加载 |
 | `hc run dsh …` 提示找不到 template | 执行 `dsh-hc install-template` |
@@ -163,7 +167,7 @@ hc run --bg --parent "$DSH_HC_TERMINAL" --name helper --cwd /repo claude "…完
 scripts/dev.sh up          # 隔离环境：模拟 LLM + 隔离 hc core + 隔离 dsh web（Desktop 替身）
 scripts/dev.sh reload      # 热重载插件
 scripts/e2e.sh             # 37 项 hc 侧回归
-scripts/e2e-ui.sh          # 13 项 UI 侧回归（ego-browser）
+scripts/e2e-ui.sh          # 14 项 UI 侧回归（ego-browser）
 scripts/dev.sh down
 scripts/desktop.sh reload  # 把改动热重载进真实 Desktop（只改 cordis.patch.yml 里 herdr-bridge 这一项，首次会备份）
 ```

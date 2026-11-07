@@ -46,6 +46,9 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - 重连后 hc 地址不变，父子关系不变。
   - 宽限期过了还没连上，代理就退出（Desktop 真的退出了）。
 - **协议版本**：插件和代理之间有协议版本号。插件升级后，已经开着的终端仍运行旧版 `proxy.js`，直到它们重开；版本不符时会明确报错。
+- **放进 Herdr App**：Herdr App 只显示带 `herdr.space=<id>` 标签的 hc 终端，不认识的 id 会新建一个 space。自动映射的终端按 `herdrPlacement` 打标签：`folder` 先用 `hc ls` / `hc get` 找同一文件夹里已有终端的 space（优先用户自己的，id 不以 `dsh-` 开头），找不到就用 `dsh-<文件夹路径的哈希>`，同一文件夹的会话因此总在一个 space；`dsh` 用固定 id `dsh`；`none` 不打。只用 hc CLI，不调用 Herdr App。Herdr Agent 用 `hc run dsh` 起的会话是它的子终端，Herdr App 本来就显示在父终端下面。
+- **设置**：插件导出 schemastery 写的 `Config`，`herdrPlacement` 和 `herdrSpace` 标为 `.volatile()`：DSH 的 settings 服务把它们作为 `herdr-bridge` 命名空间的表单提供出来，改动写进 profile 补丁，插件每次用时 `.get()` 读，不用重载。schemastery 随 DSH 提供，但链接安装时可能解析不到，所以运行时按需加载；拿不到就不导出 `Config`，设置按普通值从 `cordis.patch.yml` 读取。
+- **设置页**：DSH 不根据 `Config` 生成界面（settings 服务 README：“no shipped client does so yet”），所以插件自带浏览器端 `client.js`，挂在插件页的 `plugins.row.config` 槽（key `dsh-herdr-bridge#herdr-bridge`），用官方的 `SettingsFormModel` / `SettingsForm` 读写这个命名空间；宿主端注册 `settings.configure({ auto: false })` 表示自带页面。`client.js` 按客户端模块系统的懒加载工厂格式手写（与官方 tsdown 产物相同），所以包仍然不需要构建；`react` 和 `@deepseek-ai/dsh-client-ui-primitives` 来自宿主的共享模块表。
 - **自动映射的终端命名为 `dsh-<短 id>`**：
   - hc 的终端名只能在创建时设定，而且只能用 `a-z 0-9 - _`，放不下中文标题，改名后也会过时。
   - 所以标题放进终端标题（OSC 2，Herdr App 的 Agent 列表和标签页用它命名，和 TUI Agent 一样）、7501 状态和 `dsh.title` 标签。这个名字同时起到锁的作用：重载后如果旧终端还在重连，就不会重复创建。
@@ -122,8 +125,8 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - `ls`、`attach` 回放历史、多个终端同步显示、子目录会话保持原目录。
   - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`。
   - `install-template` 往 Herdr App 的程序表里加 DSH，保留已有条目。
-- `scripts/e2e-ui.sh`（13 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
-  - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达）、`/herdr`。
+- `scripts/e2e-ui.sh`（14 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
+  - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达，按文件夹放进 Herdr App 的 space）、`/herdr`。
   - hc 回答审批后 Desktop 对话框被撤回；Desktop 回答后 hc 侧随之结束等待。
   - hc 回答提问后 Desktop 的提问被撤回。
   - 接管时自动映射的终端让位。
