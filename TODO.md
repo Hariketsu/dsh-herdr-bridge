@@ -5,7 +5,6 @@
 ## P0：公开发布前
 
 - [ ] **发布 0.1.1**：npm 上是 0.1.0，还不含终端标题、首段回复和 Herdr App 图标这几项修复。
-- [ ] **从 npm 安装到真实 Desktop**：`npm pack` 出的包已在隔离的 `dsh web` 里装过、卸过：插件能加载，`dsh-hc ls`、`install-template` 正常，卸载后 bundle 条目被移除，DSH 启动没有警告。发布后还要在 Desktop profile 上按 README 走一遍，包括发一条消息后 `hc ls` 出现 `dsh-<短 id>`。
 - [ ] **Desktop 和 `dsh web` 同时运行**：后启动的那个不提供控制 socket（`index.js` 里的 probe），但它的插件可能仍然会为自己的会话开终端，这些终端会连到另一个 Host。先实测会发生什么；至少保证不出现连错 Host 的终端，然后把 README 里这条限制写准确。
 
 ## P1：已知问题与待验证
