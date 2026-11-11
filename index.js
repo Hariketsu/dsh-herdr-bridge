@@ -232,6 +232,36 @@ export function apply(ctx, config = {}) {
   }
 
   /**
+   * In the shared space each session has a tab of its own, which Herdr App calls by its number;
+   * name it after the session instead, through the same CLI. Only a tab holding just this terminal,
+   * still called by its number or by a title this session had before: a name the person gave stays.
+   * @param titleOf - the session's title when the tab is found (it may change while Herdr App places it).
+   * @param previous - titles the plugin may have named the tab after.
+   */
+  async function nameDshTab(term, titleOf, previous = []) {
+    try {
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const listed = await herdrApp(['ls'])
+        if (listed === null) return
+        const tabs = JSON.parse(listed).spaces?.find(s => s.id === DSH_SPACE)?.tabs ?? []
+        const at = tabs.findIndex(t => t.terminals?.some(x => x.terminal === term))
+        if (at >= 0) {
+          const tab = tabs[at]
+          const title = titleOf()
+          if (tab.terminals.length !== 1 || tab.name === title) return
+          if (tab.name !== String(at + 1) && !previous.includes(tab.name)) return
+          const done = await herdrApp(['do', 'tab.rename', JSON.stringify({ id: tab.id, name: title })])
+          if (done === null) log('herdr app: naming the tab failed', term)
+          return
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    } catch (error) {
+      log('herdr app: naming the tab failed:', error?.message ?? error)
+    }
+  }
+
+  /**
    * The Herdr App space for a session started in DSH (`herdr.space` label; Herdr App only shows
    * hc terminals that carry one, and makes a new space for an id it doesn't know).
    * By folder: the space a live terminal in the same folder is already in (the person's own space
@@ -294,6 +324,7 @@ export function apply(ctx, config = {}) {
       this.launching = false
       this.seenWatch = null // { term, child, check }: `hc events` while in error or in view, see watch()
       this.wroteTurn = null // the turn this plugin last marked seen while the session was in view
+      this.inDshSpace = false // its terminal is in the shared Herdr App space, whose tabs it names
       bridges.set(sessionId, this)
       this.loadTitle()
     }
@@ -359,9 +390,12 @@ export function apply(ctx, config = {}) {
     retitle(title) {
       title = oneLine(title, 80)
       if (!title || title === this.title) return
+      const previous = this.title
       this.title = title
       this.out(osc(this.status, this.title) + windowTitle(this.title))
-      if (this.terminal) runHc(['label', this.terminal, `dsh.title=${title}`])
+      if (!this.terminal) return
+      runHc(['label', this.terminal, `dsh.title=${title}`])
+      if (this.inDshSpace) nameDshTab(this.terminal, () => this.title, [previous])
     }
 
     async loadTitle() {
@@ -462,7 +496,9 @@ export function apply(ctx, config = {}) {
         await controller.prompt({
           requestId: HC_REQUEST_PREFIX + randomUUID(),
           sessionId: this.sessionId,
-          mode: 'queue',
+          // Like typing into any agent in hc: steering joins the running turn at its next step (hc's
+          // notes about helpers too); an idle session starts a turn with it.
+          mode: 'steer',
           content: [{ type: 'text', text }],
         }, new AbortController().signal)
       } catch (error) {
@@ -496,10 +532,14 @@ export function apply(ctx, config = {}) {
 
     /** Put an automatic mirror into a Herdr App space, unless it is in one already (placed by us before, or moved by the person). */
     async place(term) {
-      if ((await hcJson(['get', term]))?.labels?.['herdr.space']) return
-      const space = await herdrSpaceFor(this.cwd)
-      if (space) runHc(['label', term, `herdr.space=${space}`])
-      if (space === DSH_SPACE) nameDshSpace(this.cwd)
+      let space = (await hcJson(['get', term]))?.labels?.['herdr.space']
+      if (!space) {
+        space = await herdrSpaceFor(this.cwd)
+        if (space) runHc(['label', term, `herdr.space=${space}`])
+        if (space === DSH_SPACE) nameDshSpace(this.cwd)
+      }
+      this.inDshSpace = space === DSH_SPACE
+      if (this.inDshSpace) nameDshTab(term, () => this.title, [basename(this.cwd || '') || 'dsh'])
     }
 
     /** Close every terminal mirroring this session; `except` keeps one. */

@@ -33,6 +33,7 @@
 
 - 正常会话的 Agent 不会因为空闲被回收；Desktop 启动或打开会话时就可能 resume 它（比第一条 prompt 早约 6 秒）。
 - `sessionController.prompt` 会按需 resume Agent，所以给“冷”会话发消息不需要先加载它。
+- `sessionController.prompt` 的 `mode`：`queue` 放进下一回合（DSH 界面里直接按 Enter）；`steer` 在运行中回合的下一步交给模型，不中断回合（界面里的 Cmd/Ctrl+Enter 插话），Agent 空闲时直接开一个回合（`dsh-agent` 的 `steer()` 注释）。
 - `sessionController.list({}, signal)` 返回的条目里，标题在 `projections.values.title`。
 - `sessionController.page({ address: { kind: 'session', sessionId }, maxMessages }, signal)` 的 `records` 形如 `{ type: 'event', event }`，要解包后再渲染。
 - `ctx.agents.list()` / `get(id)` 返回存活的 Agent，`agent.status` 是 `idle` 或 `running`。
@@ -63,6 +64,8 @@
 - 程序处于 blocked 时，hc 自己会拒绝普通 `send`，加 `--force` 才会送达。
 - 调用方身份由客户端决定（`client.rs` 的 `terminal_id()`）：`HC_TERMINAL_ID` 生效的条件是 `HC_TERMINAL_SOCKET` 没设，或者指向正在连接的 core；否则按 `ppid` 算。手动设置的 `HC_TERMINAL_ID` 也有效（2026-11-11 实测：消息带上 `<hc from>`，`hc run` 的默认 parent 也是它）。之前记成“手动设置无效”是错的，当时 shell 里继承了另一个 core 的 `HC_TERMINAL_SOCKET`。
 - 从 hc 终端里启动的程序（包括用 `open -a` 启动的 Desktop）会继承这个终端的 `HC_TERMINAL_ID`、`HC_TERMINAL_SOCKET` 和 `HC_SCOPE`。hc 结束这个终端时，会清理所有带它的 `HC_SCOPE` 的进程。
+- hc 把子终端的通知（出错、阻塞、退出、回合结束）作为带标记的文字打进父 Agent 的终端，父 Agent 正在工作时也照样打进去，当作插话（`notes.rs` 的 `can_take_note`）。
+- hc 的 `turn` 在回合结束时加一，回合进行中读到的是上一个值。
 - 终端名只能在创建时设置（`[a-z0-9-_]`，最多 32 个字符，在存活终端里唯一）；标签可以随时用 `hc label` 修改。
 - `hc ls --json` 不带 labels；`agent` 字段是 7501 里报的 `app`。
 - 终端退出时，`hc events` 会发一个 `status: null` 的事件；标题变化也会产生一个状态值相同的 status 事件。

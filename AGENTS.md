@@ -18,7 +18,7 @@ dsh-herdr-bridge 是一个 DSH 插件，把 DSH（Desktop 和 `dsh web`）的会
 
 - 不修改 DSH、Herdr Core、Herdr App 的源码。
 - 生产架构里不引入第二份 DSH Runtime。测试时在隔离的 `DSH_HOME` 里跑 `dsh headless` / `dsh web` 不受此限。
-- 对 hc 只依赖 CLI 和 OSC 7501，不直接调用 hc 的 JSON-RPC。对 Herdr App 只用它公开的命令行（`herdr-app ls` / `do`），目前只用来给共享 space 起名。
+- 对 hc 只依赖 CLI 和 OSC 7501，不直接调用 hc 的 JSON-RPC。对 Herdr App 只用它公开的命令行（`herdr-app ls` / `do`），目前只用来给共享 space 和其中的 tab 起名。
 - DSH 和其他 Herdr Agent 一样对待：信任模型和语义都和 hc 对齐（`--force` 是唯一的闸门，插件不自动回答审批）。体验优先于实现上省事；兼顾跨平台。
 - 插件只用 Node 内置模块，纯 ESM，不需要构建。
 - 宿主服务一律在 `ctx.inject(['x'], c => …)` 子作用域里获取：这个 cordis 版本没有可选依赖，顶层 `inject` 缺一个服务，插件就一直 pending。

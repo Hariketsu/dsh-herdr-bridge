@@ -150,7 +150,11 @@ check "archiving the session in Desktop closes its terminal" "$(hc get "$FAILING
 
 # 9. Looking at a session in the DSH window marks its hc terminal seen (herdr.seen), as a Herdr
 #    client would: a seen error stays error; a turn that ends in view is seen; one out of view isn't.
-open_session() { ui "await page.click('loc=css:[data-row-key=\"session:$(hc get "$1" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["labels"]["dsh.session"])')\"]', { label: 'open session' }); await page.waitForTimeout(1500);" >/dev/null; }
+# A session started from hc can take a moment to reach the sidebar: wait for its row.
+open_session() {
+  ROW="[data-row-key=\"session:$(hc get "$1" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["labels"]["dsh.session"])')\"]"
+  ui "await page.waitForSelector('loc=css:$ROW', { timeout: 10000 }); await page.click('loc=css:$ROW', { label: 'open session' }); await page.waitForTimeout(1500);" >/dev/null
+}
 ERR=ui-err-$$; OK=ui-ok-$$
 hc run --bg --name "$ERR" dsh "fails out of view [[fail]]" >/dev/null; hc wait "$ERR" --timeout 60 >/dev/null
 hc run --bg --name "$OK" dsh "finishes out of view [[e2e]]" >/dev/null; hc wait "$OK" --timeout 60 >/dev/null

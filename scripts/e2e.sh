@@ -12,6 +12,7 @@ FAILED=0
 
 state() { field "$1" state; }
 field() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;s=json.load(sys.stdin).get("status") or {};print(s.get(sys.argv[1],""))' "$2"; }
+turn() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["turn"])'; }
 address() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["address"])'; }
 label() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;print(json.load(sys.stdin).get("labels",{}).get(sys.argv[1],""))' "$2"; }
 # Live terminals reporting as DSH (`hc ls --json` has no labels, but shows the reporting app as agent).
@@ -45,6 +46,14 @@ check "slow turn is working" "$(state "$T")" working
 hc interrupt "$T" >/dev/null
 check "interrupt returns to idle" "$(state "$T")" idle
 contains "cancel is shown" "$T" "✻ cancelled"
+
+# Input arriving during a turn joins it (steering), as with any agent in hc, instead of queueing a new turn.
+hc send "$T" "slow again [[slow:4]]" >/dev/null; sleep 1
+STURN=$(turn "$T")
+hc send --wait --timeout 60 "$T" "steered [[e2e]]" >/dev/null
+# hc counts a turn when it ends: one more, not two.
+check "a message sent during a turn joins that turn" "$(state "$T"):$(turn "$T")" "done:$((STURN + 1))"
+contains "and the model answers it" "$T" "MOCK-REPLY: steered [[e2e]]"
 
 hc send --wait --timeout 60 "$T" "boom [[fail]]" >/dev/null
 check "model failure reports error" "$(state "$T")" error

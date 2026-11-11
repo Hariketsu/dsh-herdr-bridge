@@ -45,6 +45,8 @@ hc send --wait fix "Also cover the edge cases"
 hc interrupt fix                         # cancel the current turn
 ```
 
+A message sent while the session is working joins the current turn, like steering in DSH.
+
 The session also appears in DSH, and in Herdr App it shows under the agent that started it.
 
 **Take over a session you started in DSH.**
@@ -71,7 +73,7 @@ As with every agent in hc, answering a waiting session takes `--force`. Anything
 
 ## Settings
 
-In DSH, open **Plugins → Herdr Bridge** to choose where sessions you start in DSH appear in Herdr App: grouped by folder (default), all in one space named DSH, or not at all. You can also set these in `~/.dsh/profiles/<profile>/cordis.patch.yml`:
+In DSH, open **Plugins → Herdr Bridge** to choose where sessions you start in DSH appear in Herdr App: grouped by folder (default), all in one space named DSH with a tab per session, or not at all. You can also set these in `~/.dsh/profiles/<profile>/cordis.patch.yml`:
 
 ```yaml
 - id: herdr-bridge

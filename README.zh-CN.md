@@ -45,6 +45,8 @@ hc send --wait fix "边界情况也覆盖一下"
 hc interrupt fix                         # 取消当前回合
 ```
 
+会话正在工作时发来的消息会并入当前回合，和 DSH 里的插话一样。
+
 这个会话也会出现在 DSH 里；在 Herdr App 里，它显示在启动它的 Agent 下面。
 
 **接管在 DSH 里开的会话。**
@@ -71,7 +73,7 @@ hc send --force fix 1,3    # 回答提问：选项编号，或直接写文字
 
 ## 设置
 
-在 DSH 里打开 **插件 → Herdr Bridge**，选择在 DSH 里开的会话显示在 Herdr App 的哪里：按文件夹分组（默认）、都放进一个名为 DSH 的 space，或者不显示。也可以写在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 里：
+在 DSH 里打开 **插件 → Herdr Bridge**，选择在 DSH 里开的会话显示在 Herdr App 的哪里：按文件夹分组（默认）、都放进一个名为 DSH 的 space（每个会话一个以标题命名的 tab），或者不显示。也可以写在 `~/.dsh/profiles/<profile>/cordis.patch.yml` 里：
 
 ```yaml
 - id: herdr-bridge
