@@ -52,6 +52,7 @@ scripts/dev.sh down      # 停掉隔离 hc core、dsh web 和 mock-llm.py
 | `[[approve]]` | 触发提权审批 |
 | `[[question]]` | 调用 ask_user_question |
 | `[[env]]` | 输出 `DSH_HC_TERMINAL` |
+| `[[hc:NAME]]` | 在 bash 里 `hc send NAME`，再起一个子终端 `NAME-kid` |
 
 ## UI 自动化（`scripts/e2e-ui.sh`）
 

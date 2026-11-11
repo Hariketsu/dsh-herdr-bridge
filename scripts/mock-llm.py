@@ -8,6 +8,7 @@
 #             with sandbox_permissions, which raises an approval request
 #   [[question]]  call ask_user_question (pick red or blue), then echo the tool result
 #   [[env]]   run `echo DSH_HC_TERMINAL=$DSH_HC_TERMINAL` in bash, then echo the tool result
+#   [[hc:NAME]]  in bash, `hc send NAME` a greeting and start a helper NAME-kid, then echo the result
 #   [[stream]]  stream the reply word by word, 0.15 s apart
 # The request log records whether the herdr-bridge skill is in the model's context.
 #   anything else: answer "MOCK-REPLY: <prompt>" at once
@@ -140,7 +141,7 @@ class H(BaseHTTPRequestHandler):
             self.send_response(400)
             self.send_header("content-type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"type": "error", "error": {"type": "invalid_request_error", "message": "mock failure"}}).encode())
+            self.wfile.write(json.dumps({"type": "error", "error": {"type": "invalid_request_error", "message": "mock failure: " + "the gateway rejected this request; " * 8 + "\nsecond line of the error, end-of-error"}}).encode())
             return
         slow = re.search(r"\[\[slow(?::(\d+))?\]\]", prompt)
         if not title and slow:
@@ -168,6 +169,14 @@ class H(BaseHTTPRequestHandler):
                 tool_input = {"command": "echo DSH_HC_TERMINAL=$DSH_HC_TERMINAL", "description": "show hc address"}
             else:
                 text = f"MOCK-REPLY: env says {tool_result_text(body)[:200]}"
+        hc_to = re.search(r"\[\[hc:([a-z0-9-]+)\]\]", prompt)
+        if not title and hc_to:
+            if pending_tool_use(body) is None:
+                name = hc_to.group(1)
+                tool_input = {"command": f"hc send {name} 'hi from dsh' >/dev/null && hc run --bg --name {name}-kid sleep 60 >/dev/null && echo sent",
+                              "description": "talk to hc"}
+            else:
+                text = f"MOCK-REPLY: hc says {tool_result_text(body)[:200]}"
         if not title and "[[question]]" in prompt:
             if pending_tool_use(body) is None:
                 tool_name = "ask_user_question"

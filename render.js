@@ -111,7 +111,7 @@ export class Renderer {
         if (reason.kind === 'completed' || reason.kind === 'max-tokens') return crlf(`${style.dim(`✻ done${took}`)}\n`)
         if (reason.kind === 'aborted') return crlf(`${style.yellow('✻ cancelled')}${style.dim(took)}\n`)
         if (reason.kind === 'interrupted') return ''
-        return crlf(`${style.red(`✻ error: ${oneLine(reason.error?.message ?? reason.kind, 200)}`)}\n`)
+        return crlf(`${style.red(`✻ error: ${indent(String(reason.error?.message ?? reason.kind).trim(), '  ')}`)}\n`)
       }
       default:
         return ''

@@ -6,8 +6,8 @@
 // See README.md for the design.
 import net from 'node:net'
 import { execFile, spawn } from 'node:child_process'
-import { appendFileSync, chmodSync, existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join, sep } from 'node:path'
+import { accessSync, appendFileSync, chmodSync, constants, existsSync, mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { basename, delimiter, join, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -94,26 +94,34 @@ function lines(socket, onMessage) {
 const send = (socket, message) => { if (!socket.destroyed) socket.write(`${JSON.stringify(message)}\n`) }
 
 const realpath = p => { try { return realpathSync(p) } catch { return p } }
+/** The first executable `name` in `dirs` (with Windows' extensions), like a shell's PATH lookup. */
+const findOnPath = (name, dirs) => {
+  const exts = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : ['']
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const file = join(dir, name + ext)
+      try { accessSync(file, constants.X_OK); if (statSync(file).isFile()) return file } catch {}
+    }
+  }
+  return null
+}
 
 const SKILL = `# DSH session in Herdr (herdr-bridge)
 
-This DSH session is mirrored into Herdr Core (hc) as an ordinary terminal, so you can use \`hc\`
-(see the \`herdr-core\` skill or \`hc --skill\`) to run and coordinate other agents.
+This DSH session is mirrored into Herdr Core (hc) as an ordinary terminal, and \`hc\` in your shell
+acts as that terminal: use it as any agent in hc does (see the \`herdr-core\` skill or \`hc --skill\`).
+Helpers you start show under you and know to report back to you.
 
-- \`$DSH_HC_TERMINAL\` is this session's own hc address (empty until the session is mirrored,
-  which happens on its first run).
-- hc cannot tell which terminal your shell belongs to, so name yourself explicitly:
-  start helpers with \`hc run --bg --parent "$DSH_HC_TERMINAL" --name <name> --cwd <dir> <template|command> "<task>"\`
-  and tell them to report with \`hc send $DSH_HC_TERMINAL "<result>"\`.
-- Their reports, and hc's notes about them (finished, blocked, exited), arrive as your next user
-  message. After starting helpers, end your turn instead of waiting; you will be woken.
+- \`$DSH_HC_TERMINAL\` is your own hc address. It is empty until the session is mirrored (on its
+  first run); until then hc doesn't know who you are, so use \`hc run --bg --no-parent …\` and ask
+  for reports to a file.
+- Reports from helpers, and hc's notes about them (finished, blocked, exited), arrive as your next
+  user message. After starting helpers, end your turn instead of waiting; you will be woken.
 - Your shell calls time out after about 60 s: if you must wait, use \`hc wait <t> --timeout 50\`
   and repeat, never a bare \`hc wait\`.
-- Without \`$DSH_HC_TERMINAL\`, use \`hc run --bg --no-parent …\` and ask for reports to a file.
 `
 
 export function apply(ctx, config = {}) {
-  const hc = config.hc || 'hc'
   // Volatile settings are references read at each use; a linked checkout passes plain values.
   const live = value => typeof value?.get === 'function' ? value.get() : value
   const herdrSpace = () => live(config.herdrSpace) || ''
@@ -141,6 +149,32 @@ export function apply(ctx, config = {}) {
     writeFileSync(file, `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 DSH_HERDR_SOCKET=${q(socketPath)} DSH_HERDR_LAUNCHER=${q(file)} exec ${q(process.execPath)} ${q(proxy)} "$@"\n`)
     chmodSync(file, 0o755)
     return file
+  })()
+
+  // The DSH process may have been started from an hc terminal and inherited its identity; it is not
+  // that terminal, and neither are the sessions' shells. Instead, an `hc` shim first on PATH turns
+  // each shell's $DSH_HC_TERMINAL into HC_TERMINAL_ID, so hc knows the session as the caller, the way
+  // it knows any agent running in a terminal. The plugin's own calls go straight to the real hc.
+  delete process.env.HC_TERMINAL_ID
+  delete process.env.HC_TERMINAL_SOCKET
+  const hc = (() => {
+    const bin = join(home, 'bin')
+    const pathKey = Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH'
+    const dirs = (process.env[pathKey] ?? '').split(delimiter).filter(d => d && d !== bin)
+    const real = config.hc && /[\\/]/.test(config.hc) ? config.hc : findOnPath(config.hc || 'hc', dirs)
+    if (!real) {
+      log('hc not found on PATH; set `hc` in the config')
+      return config.hc || 'hc'
+    }
+    if (process.platform === 'win32') {
+      writeFileSync(join(bin, 'hc.cmd'), `@echo off\r\nif defined DSH_HC_TERMINAL set "HC_TERMINAL_ID=%DSH_HC_TERMINAL%"\r\n"${real}" %*\r\n`)
+    } else {
+      const file = join(bin, 'hc')
+      writeFileSync(file, `#!/bin/sh\n[ -n "\${DSH_HC_TERMINAL:-}" ] && export HC_TERMINAL_ID="$DSH_HC_TERMINAL"\nexec '${real.replace(/'/g, `'\\''`)}' "$@"\n`)
+      chmodSync(file, 0o755)
+    }
+    process.env[pathKey] = [bin, ...dirs].join(delimiter)
+    return real
   })()
 
   // hc's `dsh` template and Herdr App's DSH entry, kept current so nobody runs an install step.
@@ -284,20 +318,19 @@ export function apply(ctx, config = {}) {
 
     /**
      * `herdr.seen=<turn>` is how Herdr clients share what a person has looked at (Herdr App
-     * docs/labels.md). Two uses, each following the terminal's `hc events` while it applies:
-     * - A DSH window showing this session counts as looking, so the plugin writes the label for it
-     *   like any Herdr client: when the session comes into view and when a turn ends in view.
-     * - Herdr clients show `error` as needing a person even once seen, but a failed DSH turn has
-     *   already stopped; so an error turns idle once the seen turn reaches the turn that failed.
+     * docs/labels.md). A DSH window showing this session counts as looking, so while it does, the
+     * plugin follows the terminal's `hc events` and writes the label like any Herdr client: when the
+     * session comes into view and when a turn ends in view. Seeing never changes the status: like
+     * Claude Code, an error stays `error` until the next turn.
      */
     watch() {
-      const term = this.status.state === 'error' || viewed(this.sessionId) ? this.terminal : ''
+      const term = viewed(this.sessionId) ? this.terminal : ''
       if (this.seenWatch?.term === term) return this.seenWatch?.check()
       this.seenWatch?.child.kill()
       this.seenWatch = null
       if (!term) return
       const child = spawn(hc, ['events', '--json', '--terminal', term], { stdio: ['ignore', 'pipe', 'ignore'] })
-      let turn = null, failedTurn = null, seen = null
+      let turn = null, seen = null
       const number = value => value === undefined || value === null || value === '' ? null : Number(value)
       const check = () => {
         if (turn === null) return
@@ -306,7 +339,6 @@ export function apply(ctx, config = {}) {
           this.wroteTurn = seen = turn
           runHc(['label', term, `herdr.seen=${turn}`])
         }
-        if (failedTurn !== null && seen !== null && seen >= failedTurn && this.status.state === 'error') this.set('idle')
       }
       const watch = this.seenWatch = { term, child, check }
       child.on('error', error => log('hc events failed:', error.message))
@@ -317,13 +349,10 @@ export function apply(ctx, config = {}) {
         if (snapshot) {
           turn = snapshot.turn
           seen = number(snapshot.labels?.['herdr.seen'])
-          failedTurn = snapshot.status?.state === 'error' ? snapshot.turn : null
         } else if (type === 'labels') seen = number(data?.labels?.['herdr.seen'])
         // A turn ends with its status, then a `turn` event: decide on the turn (docs/labels.md).
-        else if (type === 'turn') {
-          turn = data?.turn ?? turn
-          failedTurn = data?.state === 'error' ? data.turn : null
-        } else return
+        else if (type === 'turn') turn = data?.turn ?? turn
+        else return
         check()
       })
     }
@@ -368,7 +397,7 @@ export function apply(ctx, config = {}) {
       // that comes back remembers what it last showed (done or error), so keep that.
       const kept = hello.status
       if (hello.resumed && !this.statusSeen && this.status.state === 'idle' && ['done', 'error'].includes(kept?.state)) {
-        this.status = { state: kept.state, ...(kept.msg ? { msg: oneLine(kept.msg) } : {}) }
+        this.status = { state: kept.state, ...(kept.msg ? { msg: oneLine(kept.msg, 500) } : {}) }
       }
       const conn = { auto: Boolean(hello.auto), queue: [] }
       const inFlight = this.renderer.inFlight()
@@ -514,7 +543,7 @@ export function apply(ctx, config = {}) {
     const end = bridge.lastEnd
     if (!end || end.kind === 'completed' || end.kind === 'max-tokens') bridge.set(end ? 'done' : 'idle')
     else if (end.kind === 'aborted') bridge.set('idle')
-    else bridge.set('error', { msg: oneLine(end.error?.message ?? end.kind) })
+    else bridge.set('error', { msg: oneLine(end.error?.message ?? end.kind, 500) })
   })
 
   ctx.on('session/event', (session, event) => {

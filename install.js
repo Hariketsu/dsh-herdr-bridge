@@ -31,7 +31,7 @@ export function installTemplate(launcher) {
   const dir = templateDir()
   const file = join(dir, 'dsh.md')
   const text = `---
-description: A DeepSeek Harness (DSH) session in this folder, via dsh-herdr-bridge; reports status. List recent sessions with \`${quoted} ls\`; take one over with \`hc run --bg --name <name> ${quoted} attach <id|title>\`.
+description: DeepSeek Harness (DSH) coding agent, like claude or codex: give it a task. Sessions opened in DSH Desktop or dsh web also show in \`hc ls\` as agent=dsh. List recent sessions: \`${quoted} ls\`; take one over: \`hc run --bg --name <name> ${quoted} attach <id|title>\`.
 command: ${quoted} new
 generator: ${GENERATOR}
 ---

@@ -130,7 +130,7 @@ hc wait "$STREAMED" --timeout 60 >/dev/null
 if hc read "$STREAMED" --lines 40 | grep -qF "MOCK-REPLY: a reply that streams word by word while its mirror opens"; then check "a reply streaming before the mirror joined arrives whole" yes yes; else check "a reply streaming before the mirror joined arrives whole" no yes; fi
 
 # 8. A Desktop session that fails on its first run counts a turn in hc; failing in front of the
-#    person, it is seen at once (idle). Archiving it in Desktop closes its terminal.
+#    person, it is seen at once but stays error. Archiving it in Desktop closes its terminal.
 printf '%s\n' "$(dsh_names)" > "$ISO/names.before"
 ui '
 await page.keyboard.press("Alt+Meta+n");
@@ -140,7 +140,7 @@ await page.waitForFunction(() => document.body.innerText.includes("mock failure"
 ' >/dev/null
 sleep 2
 FAILING=$(dsh_names | grep -vxF -f "$ISO/names.before" | head -1)
-check "a first run that fails in view counts a turn and is seen at once" "$(state "$FAILING"):$(turn "$FAILING"):$(seen "$FAILING")" idle:1:1
+check "a first run that fails in view counts a turn and is seen at once" "$(state "$FAILING"):$(turn "$FAILING"):$(seen "$FAILING")" error:1:1
 ui '
 await page.hover("loc=css:[role=treeitem][aria-selected=true]", { label: "show session actions" });
 await page.click("loc=css:[role=treeitem][aria-selected=true] button[aria-label=\"Archive session\"]", { label: "archive session" });
@@ -149,14 +149,14 @@ sleep 2
 check "archiving the session in Desktop closes its terminal" "$(hc get "$FAILING" --json >/dev/null 2>&1 && echo still-there || echo gone)" gone
 
 # 9. Looking at a session in the DSH window marks its hc terminal seen (herdr.seen), as a Herdr
-#    client would: a seen error turns idle; a turn that ends in view is seen; one out of view isn't.
+#    client would: a seen error stays error; a turn that ends in view is seen; one out of view isn't.
 open_session() { ui "await page.click('loc=css:[data-row-key=\"session:$(hc get "$1" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["labels"]["dsh.session"])')\"]', { label: 'open session' }); await page.waitForTimeout(1500);" >/dev/null; }
 ERR=ui-err-$$; OK=ui-ok-$$
 hc run --bg --name "$ERR" dsh "fails out of view [[fail]]" >/dev/null; hc wait "$ERR" --timeout 60 >/dev/null
 hc run --bg --name "$OK" dsh "finishes out of view [[e2e]]" >/dev/null; hc wait "$OK" --timeout 60 >/dev/null
 check "an error out of view stays error, not seen" "$(state "$ERR"):$(seen "$ERR")" error:
 open_session "$ERR"
-check "opening it in the DSH window marks it seen and turns it idle" "$(state "$ERR"):$(seen "$ERR")" idle:$(turn "$ERR")
+check "opening it in the DSH window marks it seen and it stays error" "$(state "$ERR"):$(seen "$ERR")" error:$(turn "$ERR")
 hc send --wait --timeout 60 "$ERR" "again in view [[e2e]]" >/dev/null; sleep 1
 check "a turn that ends in view is seen" "$(turn "$ERR"):$(seen "$ERR")" 2:2
 check "a turn that ended out of view is not" "$(state "$OK"):$(seen "$OK")" done:

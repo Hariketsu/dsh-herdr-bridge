@@ -61,7 +61,8 @@
 
 - `hc send` 送来的是 `ESC[200~文本ESC[201~` 加 `\r`；`hc interrupt` 送来的是单独一个 `ESC`。
 - 程序处于 blocked 时，hc 自己会拒绝普通 `send`，加 `--force` 才会送达。
-- 手动设置的 `HC_TERMINAL_ID` **不会**被当作调用方；要指定父终端，用 `hc run --parent <t>`。hc 运行的程序的环境里有 `HC_TERMINAL_ID`。
+- 调用方身份由客户端决定（`client.rs` 的 `terminal_id()`）：`HC_TERMINAL_ID` 生效的条件是 `HC_TERMINAL_SOCKET` 没设，或者指向正在连接的 core；否则按 `ppid` 算。手动设置的 `HC_TERMINAL_ID` 也有效（2026-11-11 实测：消息带上 `<hc from>`，`hc run` 的默认 parent 也是它）。之前记成“手动设置无效”是错的，当时 shell 里继承了另一个 core 的 `HC_TERMINAL_SOCKET`。
+- 从 hc 终端里启动的程序（包括用 `open -a` 启动的 Desktop）会继承这个终端的 `HC_TERMINAL_ID`、`HC_TERMINAL_SOCKET` 和 `HC_SCOPE`。hc 结束这个终端时，会清理所有带它的 `HC_SCOPE` 的进程。
 - 终端名只能在创建时设置（`[a-z0-9-_]`，最多 32 个字符，在存活终端里唯一）；标签可以随时用 `hc label` 修改。
 - `hc ls --json` 不带 labels；`agent` 字段是 7501 里报的 `app`。
 - 终端退出时，`hc events` 会发一个 `status: null` 的事件；标题变化也会产生一个状态值相同的 status 事件。

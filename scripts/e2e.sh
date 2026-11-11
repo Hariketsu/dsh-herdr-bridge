@@ -49,6 +49,7 @@ contains "cancel is shown" "$T" "✻ cancelled"
 hc send --wait --timeout 60 "$T" "boom [[fail]]" >/dev/null
 check "model failure reports error" "$(state "$T")" error
 contains "error is shown" "$T" "✻ error"
+contains "the whole error is shown" "$T" "end-of-error"
 
 A=e2e-a-$RUN
 hc run --bg --name "$A" dsh "needs approval [[approve]]" >/dev/null
@@ -78,6 +79,14 @@ hc run --bg --name "$E" dsh "env [[env]]" >/dev/null
 hc wait "$E" --timeout 60 >/dev/null
 contains "the session's shell gets DSH_HC_TERMINAL = its hc address" "$E" "DSH_HC_TERMINAL=$(address "$E")"
 contains "tool calls show their description and result" "$E" "⏺ bash show hc address"
+# hc in the session's shell acts as the session's terminal, even though the test's own shell (and so
+# dsh web) may carry another terminal's HC_TERMINAL_ID.
+IN=e2e-in-$RUN
+hc run --bg --name "$IN" sh -c 'printf "\033]7501;state=idle\033\\"; cat' >/dev/null
+hc send --wait --timeout 60 "$E" "talk [[hc:$IN]]" >/dev/null
+contains "a message the session sends with hc comes from its terminal" "$IN" "<hc from=\"$(address "$E") $E\">hi from dsh"
+check "a helper it starts with hc is its child" "$(hc get "$IN-kid" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin).get("parent"))')" "$(address "$E")"
+for t in "$IN" "$IN-kid"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
 if grep -q '"bridge_skill": true' "${DSH_BRIDGE_ISO:-/tmp/dsh-iso}/mock.log"; then check "herdr-bridge skill reaches the model" yes yes; else check "herdr-bridge skill reaches the model" no yes; fi
 
 # Discovery and takeover: dsh-hc ls finds the session; attach replays its conversation.
@@ -110,12 +119,11 @@ check "a terminal survives a plugin reload with the same address" "$(address "$R
 check "it still reports the running turn" "$(state "$R")" working
 check "a finished session stays done across the reload" "$(state "$A")" done
 check "a failed session stays error across the reload" "$(state "$F")" error
-# Herdr clients write herdr.seen=<turn> for what a person looked at; a seen error turns idle.
+# Herdr clients write herdr.seen=<turn> for what a person looked at; like Claude Code, a seen
+# error stays error until the next turn.
 FTURN=$(hc get "$F" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["turn"])')
-hc label "$F" "herdr.seen=$((FTURN - 1))" >/dev/null; sleep 1
-check "an error seen only up to an earlier turn stays error" "$(state "$F")" error
 hc label "$F" "herdr.seen=$FTURN" >/dev/null; sleep 1
-check "an error seen in Herdr turns idle" "$(state "$F")" idle
+check "an error seen in Herdr stays error" "$(state "$F")" error
 hc wait "$R" --timeout 60 >/dev/null
 check "and the turn finishes" "$(state "$R")" done
 contains "the reconnect is visible" "$R" "⋯ reconnected"

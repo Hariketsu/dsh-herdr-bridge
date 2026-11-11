@@ -53,6 +53,8 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
   - hc 的终端名只能在创建时设定，而且只能用 `a-z 0-9 - _`，放不下中文标题，改名后也会过时。
   - 所以标题放进终端标题（OSC 2，Herdr App 的 Agent 列表和标签页用它命名，和 TUI Agent 一样）、7501 状态和 `dsh.title` 标签。这个名字同时起到锁的作用：重载后如果旧终端还在重连，就不会重复创建。
   - 由 Herdr Agent 接管的终端，名字由 Agent 自己起。
+  - 每个终端带 `dsh.session=<会话 id>` 和 `dsh.title=<会话标题>` 两个标签，Agent 可以用 `hc get` 查到对应的 DSH 会话。
+- **hc 发起的会话放进哪个 DSH 工作区**：`hc run dsh` 的文件夹正好是某个 DSH 工作区时加入它；是某个工作区的子文件夹时建成“未分组”会话并保留这个文件夹；其他文件夹新建工作区。
 
 ## 状态映射（OSC 7501）
 
@@ -61,14 +63,13 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 | `agent/status` → `running` | `working` |
 | `turn/end{completed \| max-tokens}` 后变为 idle | `done` |
 | `turn/end{aborted}` 后变为 idle | `idle` |
-| `turn/end{error \| blocked}` 后变为 idle | `error`，`msg` = 原因 |
-| 处于 `error`，在 Herdr 或 DSH 窗口里看过了出错的那一回合 | `idle` |
+| `turn/end{error \| blocked}` 后变为 idle | `error`，`msg` = 原因（一行；终端里显示完整报错） |
 | 审批或提问进行中 | `blocked`，`kind=permission \| question` |
 | `session/title` | `title` |
 
-**看过的报错变 idle**：Herdr 客户端把 `error` 一律当作 Needs you，不管看没看过（Herdr App `docs/labels.md`），而 DSH 报错后已经停下，没有在等人。所以会话处于 `error` 时，插件用 `hc events --terminal <地址>` 跟着它的终端：Herdr 客户端在人真正看到这个终端时写入 `herdr.seen=<turn>`，一旦它追上出错的那一回合（按 `turn` 事件判断，和 labels.md 的规则一致），插件就报 `idle`。报错那一刻仍然是 `error`，所以 `hc wait` 等它的父 Agent 照样会被唤醒。离开 `error` 时这个 `hc events` 进程就结束（除非会话正在 DSH 窗口里被看着，见下）。
+**报错保持 `error` 到下一回合**：和 Claude Code 一致（2026-11-11 在隔离 hc 里实测：API 返回 404 时它报 `error`，`msg` 是一句完整的报错；写入 `herdr.seen` 后仍是 `error`，直到下一回合）。看没看过只体现在 `herdr.seen` 标签上，插件不因此改写状态，父 Agent 事后用 `hc ls` / `hc get` 也能看到出过错。代价是 Herdr App 和 Perch 会一直把它显示为 Needs you（labels.md 对 `error` 不看 seen），原生 Agent 也一样。
 
-**DSH 窗口也算 Herdr 客户端**：在 DSH 里看过的回合，插件替你写 `herdr.seen`，就像 Herdr App 一样，所以 Herdr App 和 Perch 里看过的 Done 变成 Idle，看过的 error 按上一条变成 idle。
+**DSH 窗口也算 Herdr 客户端**：在 DSH 里看过的回合，插件替你写 `herdr.seen`，就像 Herdr App 一样，所以 Herdr App 和 Perch 里看过的 Done 变成 Idle。
 - 判定“在看”（浏览器端 `client.js`）：会话在主视图（`ctx.sessions.list` 行的 `retainedBy.mainView > 0`，和 DSH 自己的完成提醒同一个依据），而且页面可见、窗口有焦点，即 labels.md 说的“真的在人面前”。
 - 上报通道：插件宿主端用 `ctx.connection.fetch.register` 注册精确路由 `POST /api/herdr-bridge.viewing`（DSH 自己的会话导出也是这样和浏览器端通信的；只有 owner 的浏览器能访问），浏览器端在主视图、可见性、焦点变化时上报 `{ client, sessions }`。在看的时候每 10 秒重复一次；宿主端 25 秒收不到就当作不再在看，窗口直接关掉也不会一直算着。
 - 写入：会话在看的时候，插件也用 `hc events` 跟着它的终端；进入视野时和在视野里结束一个回合时（`turn` 事件），写 `herdr.seen=<turn>`。按 labels.md：每回合只写一次、只升不降、标签缺失时也写；别处“标为未读”不会被一直开着的窗口顶回去，重新看一次才再写。
@@ -103,10 +104,14 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 
 这依赖 DSH 的两处实现细节：审批链上传递的是同一个请求对象，gateway 在转发时读取 `request.signal`。如果失效，表现是 Desktop 的对话框不撤回，不会导致错误批准。`scripts/e2e-ui.sh` 会检测到。
 
-## 反向：为什么用 `DSH_HC_TERMINAL` 加 `--parent`
+## 反向：DSH 会话里的 `hc` 以会话自己的终端身份调用
 
-- shell-env 只允许注入 `DSH_*` 变量。实测手动设置 `HC_TERMINAL_ID` 时，hc 也不会把它当作调用方：既不会成为 parent，也不会给消息加 `<hc from>` 标签。
-- herdr-core skill 默认使用者身处一个 hc 终端里。DSH 的 shell 不在 hc 终端里，所以由运行时 skill `herdr-bridge` 补充三点差异：自己的地址在哪里；启动 helper 要显式写 `--parent`；bash 大约 60 秒超时，不能一直 `hc wait`。环境变量的描述不会进入模型上下文，所以这些只能靠 skill 告诉模型。
+原生 Agent 由 hc 在终端里启动，`HC_TERMINAL_ID` 随进程继承到它的 shell，hc 据此知道调用方是谁：消息带 `<hc from>`，`hc run` 默认把调用方当作 parent。DSH 的会话 shell 是 DSH 主进程的子进程，不在终端的进程树上；一个主进程跑着所有会话，也不能在进程上设一个统一的身份。shell-env 只允许注入 `DSH_*` 变量，所以分两步：
+
+- 插件加载时删掉 DSH 进程继承来的 `HC_TERMINAL_ID`、`HC_TERMINAL_SOCKET`。DSH 从某个 hc 终端里启动时（比如在 Herdr 的终端里跑 `dsh web`）会带着那个终端的身份，否则所有会话的 `hc` 都会冒充它。`HC_SCOPE` 保留：从某个终端启动的 DSH 随这个终端一起结束，是 hc 本来的语义。
+- 插件在 `~/.dsh/herdr-bridge/bin` 写一个 `hc` 垫片，并把这个目录放到 DSH 进程 `PATH` 的最前面。shell-env 给每次 shell 调用注入 `DSH_HC_TERMINAL`；垫片把它转成 `HC_TERMINAL_ID`，再执行真正的 hc（插件加载时在 PATH 里找到，或用配置的 `hc`）。插件自己调用 hc 时直接用真正的 hc。
+
+会话还没映射到 hc 时，`DSH_HC_TERMINAL` 为空，垫片原样透传，hc 按 `ppid` 认调用方。运行时 skill `herdr-bridge` 只补充 DSH 自己的差异：自己的地址、映射前用 `--no-parent`、bash 大约 60 秒超时所以不能一直 `hc wait`。环境变量的描述不会进入模型上下文，这些只能靠 skill 告诉模型。
 
 ## 依赖的 DSH 接口
 
@@ -126,6 +131,8 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 | 一个中心进程服务所有终端 | 做不到：每个 hc 终端里必须有一个属于它的进程 |
 | `/herdr delegate` 授权命令 | 等于另造一套权限模型 |
 | 按会话来源决定谁回答（v1） | 改成两边竞争应答后就不再需要 |
+| skill 让模型显式写 `--parent` 和回报地址 | 靠模型每次都记得；垫片让 `hc` 自动以会话身份调用，和原生 Agent 一样 |
+| 看过的报错改报 `idle`（3b29d93） | 原生 Agent（Claude Code）看过后仍是 `error`；改写状态会让父 Agent 事后查不到出过错 |
 
 ## 验证
 
@@ -134,17 +141,17 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 - `scripts/e2e.sh`（41 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
   - 新建会话、标题（终端标题、7501、标签）、`send --wait`、interrupt、模型报错。
   - 审批从 hc 回答、blocked 时 hc 拒绝普通 send、blocked 时 interrupt、提问。
-  - `DSH_HC_TERMINAL`、skill、工具调用的渲染。
+  - `DSH_HC_TERMINAL`、会话 shell 里的 `hc` 以会话终端的身份发消息和起子 Agent（测试从 hc 终端里启动，`dsh web` 继承了别的身份）、skill、工具调用的渲染。
   - `ls`、`attach` 回放历史、多个终端同步显示、子目录会话保持原目录。
-  - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`；`herdr.seen` 追上出错的回合后变 `idle`，没追上则保持 `error`。
+  - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`；`herdr.seen` 追上出错的回合后仍是 `error`；报错完整显示在终端里。
   - 插件加载时自动安装 hc template；用户自己写的 `dsh` template 不被覆盖。`install-template` 往 Herdr App 的程序表里加 DSH，保留已有条目。
 - `scripts/e2e-ui.sh`（21 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
   - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达，按文件夹放进 Herdr App 的 space）、`/herdr`。
   - hc 回答审批后 Desktop 对话框被撤回；Desktop 回答后 hc 侧随之结束等待。
   - hc 回答提问后 Desktop 的提问被撤回。
   - 接管时自动映射的终端让位。
-  - 第一回合就报错的 Desktop 会话 turn 为 1，因为就在眼前报错，立刻被标为看过（`idle`）；在 Desktop 里归档后终端关闭。
-  - 在 DSH 窗口里打开报错的会话：写入 `herdr.seen`，变 `idle`；在视野里结束的回合被标为看过，视野外的不会，直到打开它。
+  - 第一回合就报错的 Desktop 会话 turn 为 1，因为就在眼前报错，立刻被标为看过（状态仍是 `error`）；在 Desktop 里归档后终端关闭。
+  - 在 DSH 窗口里打开报错的会话：写入 `herdr.seen`，状态仍是 `error`；在视野里结束的回合被标为看过，视野外的不会，直到打开它。
 - 真实 DSH Desktop（真实模型，手动冒烟）：
   - 新建会话、渲染、运行中重载后地址不变并跑完回合。
   - `dsh-hc ls` 列出真实会话（含中文标题）。
