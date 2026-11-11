@@ -6,7 +6,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plug
 
 Once it's installed:
 
-- **DSH sessions show up in Herdr.** When a session starts running, a `dsh-<short id>` terminal appears in [Herdr App](https://github.com/herdrdev/herdr-app). Its status follows the session through `working / done / blocked / error`.
+- **DSH sessions show up in Herdr.** When a session starts running, a `dsh-<short id>` terminal appears in [Herdr App](https://github.com/herdrdev/herdr-app). Its status follows the session through `working / done / blocked / error`. Looking at a session in DSH counts as seeing it in Herdr, the same as looking at it in Herdr App. A failed turn shows as needing you until you've seen it; archiving the session in DSH closes its terminal.
 - **Herdr drives DSH.** Herdr agents use `hc run / send / wait / read / interrupt` to start sessions, take over existing ones, send messages and cancel turns.
 - **DSH drives other agents.** The model in a DSH session can start helpers with `hc` (Claude Code, for example), and their reports come back to that session.
 - **Approvals can be answered on either side.** When a session waits for an approval or a question, answer it in the DSH window or in hc. The first answer wins, and the other side's dialog is withdrawn.
@@ -142,7 +142,7 @@ Start with the log, `~/.dsh/herdr-bridge/bridge.log`.
 ## Known limitations
 
 - **Desktop and `dsh web` can't both be connected:** they share `~/.dsh/herdr-bridge/`, and only the one started first connects to Herdr.
-- **Turns you've read in DSH still show as unseen in Herdr:** Herdr doesn't know the DSH window is also a viewer.
+- **Seen in DSH means in front of you:** a session counts as seen only while it's in the main view and the DSH window is visible and focused. Seeing a session in Herdr doesn't clear DSH's own sidebar reminder.
 - **Each mirrored session runs a proxy process**, using about 13–14 MB of physical memory.
 - **After a plugin upgrade, open terminals keep the old proxy** until they're reopened.
 - **Withdrawing the other side's dialog relies on DSH internals:** if a DSH change breaks it, the DSH dialog stays open. It never causes a wrong approval.
@@ -162,8 +162,8 @@ Installing from source, the dev loop and the isolated test environment are in [d
 ```sh
 scripts/dev.sh up          # isolated world: mock LLM + isolated hc core + isolated dsh web (Desktop stand-in)
 scripts/dev.sh reload      # hot-reload the plugin
-scripts/e2e.sh             # 39 hc-side checks
-scripts/e2e-ui.sh          # 14 UI-side checks (ego-browser)
+scripts/e2e.sh             # 41 hc-side checks
+scripts/e2e-ui.sh          # 21 UI-side checks (ego-browser)
 scripts/dev.sh down
 scripts/desktop.sh reload  # hot-reload changes into your real Desktop (only touches the herdr-bridge entry in cordis.patch.yml; backs it up the first time)
 scripts/demo-media.py      # regenerate the README media from a scripted, fully isolated demo

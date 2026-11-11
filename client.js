@@ -1,4 +1,5 @@
-// dsh-herdr-bridge, browser half: this plugin's settings, shown on its own page under Plugins.
+// dsh-herdr-bridge, browser half: this plugin's settings, shown on its own page under Plugins,
+// and which session this window shows a person, so Herdr counts it as seen (see reportViewing).
 // Hand-written in the client module system's lazy-CJS factory format (the format DSH's own tsdown
 // preset emits), so the package needs no build. It edits the volatile fields of the plugin's
 // Config (`herdrPlacement`, `herdrSpace`) through the Host's settings form for the `herdr-bridge`
@@ -129,6 +130,54 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		/** Where the plugin's Host half takes this window's report (an exact Connection Fetch route). */
+		const VIEWING_ROUTE = "api/herdr-bridge.viewing";
+		/** How often a window that is looking repeats its report; the Host forgets a silent one after 25 s. */
+		const VIEWING_REPEAT = 10000;
+
+		/**
+		 * Tell the Host which sessions this window shows a person: the session in the main view, while
+		 * the window is visible and focused (Herdr App docs/labels.md: really in front of someone).
+		 * The Host marks their hc terminals seen, as any Herdr client would.
+		 */
+		function reportViewing(sessions) {
+			const client = crypto.randomUUID();
+			let last = "";
+			const looking = () => {
+				if (document.visibilityState !== "visible" || !document.hasFocus()) return [];
+				return Object.values(sessions.list.getSnapshot().byId ?? {})
+					.filter((row) => (row.retainedBy?.mainView ?? 0) > 0)
+					.map((row) => row.id);
+			};
+			const post = (ids) => fetch(VIEWING_ROUTE, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ client, sessions: ids }),
+				keepalive: true,
+			}).catch(() => {});
+			const update = () => {
+				const ids = looking();
+				const key = ids.join(",");
+				if (key === last) return;
+				last = key;
+				post(ids);
+			};
+			const repeat = setInterval(() => { if (last) post(last.split(",")); }, VIEWING_REPEAT);
+			const unsubscribe = sessions.list.subscribe(update);
+			document.addEventListener("visibilitychange", update);
+			window.addEventListener("focus", update);
+			window.addEventListener("blur", update);
+			update();
+			return () => {
+				unsubscribe();
+				clearInterval(repeat);
+				document.removeEventListener("visibilitychange", update);
+				window.removeEventListener("focus", update);
+				window.removeEventListener("blur", update);
+				if (last) post([]);
+			};
+		}
+
 		const inject = ["slots", "locale", "configForms"];
 
 		/** Register the dictionaries and, while the Host serves the namespace, the settings on the bundle's page (between its detail and its components). */
@@ -142,6 +191,8 @@ window.__ModuleLoader__.load({
 				locale: NS,
 				inject: () => form.face,
 			}, SettingsPage))), "herdr-bridge: settings page");
+			// In a sub-scope: a client without the sessions service still gets the settings page.
+			ctx.inject(["sessions"], (c) => { c.effect(() => reportViewing(c.sessions), "herdr-bridge: report viewed sessions"); });
 		}
 
 		exports.apply = apply;

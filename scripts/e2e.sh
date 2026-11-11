@@ -110,6 +110,12 @@ check "a terminal survives a plugin reload with the same address" "$(address "$R
 check "it still reports the running turn" "$(state "$R")" working
 check "a finished session stays done across the reload" "$(state "$A")" done
 check "a failed session stays error across the reload" "$(state "$F")" error
+# Herdr clients write herdr.seen=<turn> for what a person looked at; a seen error turns idle.
+FTURN=$(hc get "$F" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["turn"])')
+hc label "$F" "herdr.seen=$((FTURN - 1))" >/dev/null; sleep 1
+check "an error seen only up to an earlier turn stays error" "$(state "$F")" error
+hc label "$F" "herdr.seen=$FTURN" >/dev/null; sleep 1
+check "an error seen in Herdr turns idle" "$(state "$F")" idle
 hc wait "$R" --timeout 60 >/dev/null
 check "and the turn finishes" "$(state "$R")" done
 contains "the reconnect is visible" "$R" "⋯ reconnected"

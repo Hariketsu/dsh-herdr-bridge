@@ -40,7 +40,7 @@ dsh-herdr-bridge 是一个 DSH 插件，把 DSH（Desktop 和 `dsh web`）的会
 |---|---|
 | `index.js` | 插件入口：会话桥、控制 socket、竞争应答、`/herdr`、shellEnv、skill、重连后接回 |
 | `render.js` | DSH 事件 → 终端文本和 OSC 7501；纯函数加每个会话的少量状态 |
-| `client.js` | 浏览器端：插件页里的设置页（手写的懒加载工厂格式，不需要构建） |
+| `client.js` | 浏览器端：插件页里的设置页，以及上报这个窗口正在看哪个会话（手写的懒加载工厂格式，不需要构建） |
 | `install.js` | 插件加载时（和 `dsh-hc install-template`）写 hc template 和 Herdr App 的程序条目 |
 | `proxy.js` | `dsh-hc`：hc 终端里的薄代理（按键、尺寸、重连），也是 CLI（`new` / `attach` / `ls` / `install-template`） |
 | `cordis.patch.yml` | 插件把自己插入 profile 的补丁 |

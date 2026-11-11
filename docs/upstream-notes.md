@@ -38,6 +38,9 @@
 - `ctx.agents.list()` / `get(id)` 返回存活的 Agent，`agent.status` 是 `idle` 或 `running`。
 - 会话可以属于 Workspace（目录必须**完全相等**），也可以未分组（`sessionController.create({ cwd })`）。`workspaceRegistry.create(path)` 是幂等的；`list()` 返回 `{ id, path }`。
 - 斜杠命令：`ctx.commands.register({ name, description, handler: async ({ agent, rawInput }) => ({ kind: 'success' | 'error', text }) })`。
+- 归档：`workspaceRegistry.archiveSession` 写入持久存储后，emit `domain/changed`（`domain: 'workspace'`，`table: ''`，`operation: 'put'`，`value.archivedSessionIds` 是新的归档集合）。这时 `workspaceRegistry.archivedSessionIds` 还是旧值，要读事件里的 `value`。归档一个空闲会话不会释放它的 Agent（没有 `agent/disposed`）。
+- 宿主端插件可以用 `ctx.connection.fetch.register({ path: '/api/…', methods: ['GET'|'HEAD'|'POST'], requestBody: 'buffered', fetch })` 注册精确路由，注册属于调用者的 fiber；只有 owner 的浏览器能访问，其他 peer 得到 403。浏览器端直接 `fetch('api/…')`（相对路径）。参考 `session-log-export`。
+- 浏览器端 `ctx.sessions.list.getSnapshot().byId[id].retainedBy.mainView > 0` 表示这个会话在主视图里；保留计数变化时 list 会通知订阅者。DSH 自己的完成提醒（`ui-session` 的 `completionUnread`）也以此为准，状态只在浏览器进程里。
 - 会话日志在 `$DSH_HOME/sessions/<目录编码>/<session>/session.v4.jsonl.zstd`，用 `zstd -dc` 读。
 
 ## DSH 审批与提问
@@ -70,6 +73,8 @@
 - Agent 列表的行和标签页用终端标题（程序用 OSC 0/2 设置的）命名，见 `defaults/mods/agents/main.js` 的 `title()`；不读 7501 的 title 和 hc 标签。标题像路径（以 `/` 或 `~` 开头）或含 `@` 时会被忽略。
 - 用 hc 启动的终端带 `herdr.space=<id>` 标签才会出现在窗口里；没有 `herdr.tab` 时，Herdr 在那个 space 里新建一个标签页。
 - 看过的 `done` 会显示成 Idle（`attention`/`seen`），状态词变了才重新提醒。
+- “看过”通过 hc 标签 `herdr.seen=<turn>` 在各客户端间共享（`docs/labels.md`）：人真正看到终端时写入，只升不降。`blocked` 和 `error` 不管看没看过都显示为 Needs you，Herdr Perch 也一样。
+- `hc events --json --terminal <t>` 先输出快照（`{seq, terminals:[{turn, labels, status, …}]}`），之后每行是 `{method:"event", params:{type, data}}`。出错时依次是 `status`、`turn{state, turn}`；标签变化是 `labels{labels}`，带完整的标签表。终端从未报过 `working` 就直接报 `error` 时，turn 不增加。
 - `HERDR_APP_HOME` 指向另一个目录，再配合 `HC_SESSION` / `XDG_STATE_HOME`，就能在用户的 Herdr 旁边再开一个连到别的 core 的实例。
 - macOS 上窗口被完全遮住时不重绘：`herdr-app shot` 返回的是最后一帧，界面层命令（如 `overlay.close`）也要等重绘才生效。
 - 首次启动的欢迎页由 `shared.json` 里的 `frame.welcomed` 控制，更新说明由 `update-notes.json` 的 `last_run` 控制；窗口位置和大小在 `window.json`。

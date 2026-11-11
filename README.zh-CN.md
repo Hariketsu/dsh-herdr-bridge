@@ -6,7 +6,7 @@
 
 装好以后：
 
-- **在 Herdr 里看到 DSH 会话**：会话一开始运行，[Herdr App](https://github.com/herdrdev/herdr-app) 里就出现一个 `dsh-<短 id>` 终端，状态在 `working / done / blocked / error` 之间跟着变。
+- **在 Herdr 里看到 DSH 会话**：会话一开始运行，[Herdr App](https://github.com/herdrdev/herdr-app) 里就出现一个 `dsh-<短 id>` 终端，状态在 `working / done / blocked / error` 之间跟着变。在 DSH 里看过会话，和在 Herdr App 里看过一样算数。回合报错时显示为需要你处理，看过后就不再提醒；在 DSH 里归档会话，它的终端也随之关闭。
 - **从 Herdr 操控 DSH**：Herdr Agent 用 `hc run / send / wait / read / interrupt` 新建会话、接管已有会话、发消息、取消回合。
 - **让 DSH 调度其他 Agent**：DSH 里的模型可以用 `hc` 启动 helper（比如 Claude Code），helper 的回报会送回这个 DSH 会话。
 - **审批两边都能答**：会话等待审批或提问时，在 DSH 界面或 hc 里回答都行，先答者生效，另一边的对话框会撤回。
@@ -142,7 +142,7 @@ Herdr App 只显示放进它某个 space 的 hc 终端。`folder`：在 DSH 里�
 ## 已知限制
 
 - **Desktop 和 `dsh web` 不能同时接入**：两者共用 `~/.dsh/herdr-bridge/`，只有先启动的那个能正常接入 Herdr。
-- **在 DSH 里看过的回合，Herdr 仍会标成没看过**：Herdr 不知道 DSH 界面也是一个观看者。
+- **在 DSH 里“看过”指真的在你面前**：只有会话在主视图、DSH 窗口可见且有焦点时才算看过。反过来，在 Herdr 里看过不会清掉 DSH 侧栏自己的完成提醒。
 - **每个映射出去的会话有一个代理进程**，实际物理内存约 13–14 MB。
 - **插件升级后，已开着的终端仍运行旧代理**，直到重开。
 - **审批的“另一边撤回”依赖 DSH 的内部实现**：DSH 改动后可能失效，表现是 DSH 界面的对话框不消失，不会导致错误批准。
@@ -162,8 +162,8 @@ Herdr App 只显示放进它某个 space 的 hc 终端。`folder`：在 DSH 里�
 ```sh
 scripts/dev.sh up          # 隔离环境：模拟 LLM + 隔离 hc core + 隔离 dsh web（Desktop 替身）
 scripts/dev.sh reload      # 热重载插件
-scripts/e2e.sh             # 39 项 hc 侧回归
-scripts/e2e-ui.sh          # 14 项 UI 侧回归（ego-browser）
+scripts/e2e.sh             # 41 项 hc 侧回归
+scripts/e2e-ui.sh          # 21 项 UI 侧回归（ego-browser）
 scripts/dev.sh down
 scripts/desktop.sh reload  # 把改动热重载进真实 Desktop（只改 cordis.patch.yml 里 herdr-bridge 这一项，首次会备份）
 ```

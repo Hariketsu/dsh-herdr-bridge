@@ -26,8 +26,8 @@ dsh plugin --profile desktop add /tmp/dsh-herdr-bridge-test-<n>.tgz
 scripts/dev.sh up        # 模拟 LLM + 隔离 hc core + 隔离 dsh web，插件以链接方式装好，template 已安装
 # 改代码…
 scripts/dev.sh reload    # 热重载，Host 不重启
-scripts/e2e.sh           # hc 侧回归（39 项）
-scripts/e2e-ui.sh        # UI 侧回归（14 项，ego-browser）
+scripts/e2e.sh           # hc 侧回归（41 项）
+scripts/e2e-ui.sh        # UI 侧回归（21 项，ego-browser）
 eval "$(scripts/dev.sh env)"; hc ls; dsh-hc ls   # 手动查看隔离环境
 scripts/dev.sh down      # 停掉隔离 hc core、dsh web 和 mock-llm.py
 ```

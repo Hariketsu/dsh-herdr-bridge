@@ -15,6 +15,8 @@ FAILED=0
 result() { sed -n 's/^RESULT://p' | tail -1; }
 check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$2', want '$3'"; FAILED=1; fi; }
 state() { hc get "$1" --json 2>/dev/null | python3 -I -c 'import json,sys;s=json.load(sys.stdin).get("status") or {};print(s.get("state",""))'; }
+turn() { hc get "$1" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["turn"])'; }
+seen() { hc get "$1" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin).get("labels",{}).get("herdr.seen",""))'; }
 dsh_names() { hc ls --json | python3 -I -c 'import json,sys;[print(t.get("name") or "") for t in json.load(sys.stdin)["terminals"] if t.get("agent")=="dsh"]' | sort; }
 
 # ui <javascript>: run in the browser task space with `page`, `send(text)`, and `text()` defined.
@@ -126,6 +128,41 @@ sleep 1
 STREAMED=$(dsh_names | grep -vxF -f "$ISO/names.before" | head -1)
 hc wait "$STREAMED" --timeout 60 >/dev/null
 if hc read "$STREAMED" --lines 40 | grep -qF "MOCK-REPLY: a reply that streams word by word while its mirror opens"; then check "a reply streaming before the mirror joined arrives whole" yes yes; else check "a reply streaming before the mirror joined arrives whole" no yes; fi
+
+# 8. A Desktop session that fails on its first run counts a turn in hc; failing in front of the
+#    person, it is seen at once (idle). Archiving it in Desktop closes its terminal.
+printf '%s\n' "$(dsh_names)" > "$ISO/names.before"
+ui '
+await page.keyboard.press("Alt+Meta+n");
+await page.waitForTimeout(1000);
+await send("fails on its first run [[fail]]");
+await page.waitForFunction(() => document.body.innerText.includes("mock failure"), undefined, { timeout: 30000 });
+' >/dev/null
+sleep 2
+FAILING=$(dsh_names | grep -vxF -f "$ISO/names.before" | head -1)
+check "a first run that fails in view counts a turn and is seen at once" "$(state "$FAILING"):$(turn "$FAILING"):$(seen "$FAILING")" idle:1:1
+ui '
+await page.hover("loc=css:[role=treeitem][aria-selected=true]", { label: "show session actions" });
+await page.click("loc=css:[role=treeitem][aria-selected=true] button[aria-label=\"Archive session\"]", { label: "archive session" });
+' >/dev/null
+sleep 2
+check "archiving the session in Desktop closes its terminal" "$(hc get "$FAILING" --json >/dev/null 2>&1 && echo still-there || echo gone)" gone
+
+# 9. Looking at a session in the DSH window marks its hc terminal seen (herdr.seen), as a Herdr
+#    client would: a seen error turns idle; a turn that ends in view is seen; one out of view isn't.
+open_session() { ui "await page.click('loc=css:[data-row-key=\"session:$(hc get "$1" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["labels"]["dsh.session"])')\"]', { label: 'open session' }); await page.waitForTimeout(1500);" >/dev/null; }
+ERR=ui-err-$$; OK=ui-ok-$$
+hc run --bg --name "$ERR" dsh "fails out of view [[fail]]" >/dev/null; hc wait "$ERR" --timeout 60 >/dev/null
+hc run --bg --name "$OK" dsh "finishes out of view [[e2e]]" >/dev/null; hc wait "$OK" --timeout 60 >/dev/null
+check "an error out of view stays error, not seen" "$(state "$ERR"):$(seen "$ERR")" error:
+open_session "$ERR"
+check "opening it in the DSH window marks it seen and turns it idle" "$(state "$ERR"):$(seen "$ERR")" idle:$(turn "$ERR")
+hc send --wait --timeout 60 "$ERR" "again in view [[e2e]]" >/dev/null; sleep 1
+check "a turn that ends in view is seen" "$(turn "$ERR"):$(seen "$ERR")" 2:2
+check "a turn that ended out of view is not" "$(state "$OK"):$(seen "$OK")" done:
+open_session "$OK"
+check "until its session is opened" "$(seen "$OK")" 1
+for t in "$ERR" "$OK"; do hc kill "$t" >/dev/null 2>&1; hc rm "$t" >/dev/null 2>&1; done
 
 [ $FAILED = 0 ] && echo "all passed" || echo "some checks failed"
 exit $FAILED

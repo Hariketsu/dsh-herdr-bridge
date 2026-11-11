@@ -5,7 +5,7 @@
 // status into that pipe, and turns keys coming back into prompts, cancellation, and answers.
 // See README.md for the design.
 import net from 'node:net'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { appendFileSync, chmodSync, existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, sep } from 'node:path'
 import { homedir } from 'node:os'
@@ -227,6 +227,24 @@ export function apply(ctx, config = {}) {
   /** @type {Map<string, Bridge>} by session id */
   const bridges = new Map()
 
+  // Sessions a person is looking at in a DSH window, as client.js reports them: the session in the
+  // main view while the window is visible and focused. Each window repeats its report while it
+  // looks, so a window that went away without saying so stops counting after VIEW_TTL.
+  const VIEW_TTL = 25_000
+  /** @type {Map<string, { ids: Set<string>, timer: NodeJS.Timeout }>} by window */
+  const viewers = new Map()
+  const viewed = id => [...viewers.values()].some(v => v.ids.has(id))
+  function setViewing(client, ids) {
+    const before = viewers.get(client)
+    clearTimeout(before?.timer)
+    const newly = ids.filter(id => !viewed(id))
+    if (ids.length) viewers.set(client, { ids: new Set(ids), timer: setTimeout(() => setViewing(client, []), VIEW_TTL) })
+    else viewers.delete(client)
+    // Looking again later counts again, even within the same turn.
+    for (const id of newly) { const bridge = bridges.get(id); if (bridge) bridge.wroteTurn = null }
+    for (const id of new Set([...(before?.ids ?? []), ...ids])) bridges.get(id)?.watch()
+  }
+
   class Bridge {
     constructor(sessionId, cwd) {
       this.sessionId = sessionId
@@ -240,6 +258,8 @@ export function apply(ctx, config = {}) {
       this.conns = new Map() // socket → { auto }
       this.renderer = new Renderer()
       this.launching = false
+      this.seenWatch = null // { term, child, check }: `hc events` while in error or in view, see watch()
+      this.wroteTurn = null // the turn this plugin last marked seen while the session was in view
       bridges.set(sessionId, this)
       this.loadTitle()
     }
@@ -259,6 +279,53 @@ export function apply(ctx, config = {}) {
       this.status = { state, ...extra }
       this.statusSeen = true
       this.out(osc(this.status, this.title))
+      this.watch()
+    }
+
+    /**
+     * `herdr.seen=<turn>` is how Herdr clients share what a person has looked at (Herdr App
+     * docs/labels.md). Two uses, each following the terminal's `hc events` while it applies:
+     * - A DSH window showing this session counts as looking, so the plugin writes the label for it
+     *   like any Herdr client: when the session comes into view and when a turn ends in view.
+     * - Herdr clients show `error` as needing a person even once seen, but a failed DSH turn has
+     *   already stopped; so an error turns idle once the seen turn reaches the turn that failed.
+     */
+    watch() {
+      const term = this.status.state === 'error' || viewed(this.sessionId) ? this.terminal : ''
+      if (this.seenWatch?.term === term) return this.seenWatch?.check()
+      this.seenWatch?.child.kill()
+      this.seenWatch = null
+      if (!term) return
+      const child = spawn(hc, ['events', '--json', '--terminal', term], { stdio: ['ignore', 'pipe', 'ignore'] })
+      let turn = null, failedTurn = null, seen = null
+      const number = value => value === undefined || value === null || value === '' ? null : Number(value)
+      const check = () => {
+        if (turn === null) return
+        // Once per turn while in view, and only to raise it: a "mark unread" elsewhere stays.
+        if (viewed(this.sessionId) && this.wroteTurn !== turn && (seen === null || seen < turn)) {
+          this.wroteTurn = seen = turn
+          runHc(['label', term, `herdr.seen=${turn}`])
+        }
+        if (failedTurn !== null && seen !== null && seen >= failedTurn && this.status.state === 'error') this.set('idle')
+      }
+      const watch = this.seenWatch = { term, child, check }
+      child.on('error', error => log('hc events failed:', error.message))
+      child.on('close', () => { if (this.seenWatch === watch) this.seenWatch = null })
+      lines(child.stdout, message => {
+        const snapshot = message.terminals?.[0]
+        const { type, data } = message.params ?? {}
+        if (snapshot) {
+          turn = snapshot.turn
+          seen = number(snapshot.labels?.['herdr.seen'])
+          failedTurn = snapshot.status?.state === 'error' ? snapshot.turn : null
+        } else if (type === 'labels') seen = number(data?.labels?.['herdr.seen'])
+        // A turn ends with its status, then a `turn` event: decide on the turn (docs/labels.md).
+        else if (type === 'turn') {
+          turn = data?.turn ?? turn
+          failedTurn = data?.state === 'error' ? data.turn : null
+        } else return
+        check()
+      })
     }
     retitle(title) {
       title = oneLine(title, 80)
@@ -312,10 +379,14 @@ export function apply(ctx, config = {}) {
         if (changed) runHc(['label', this.terminal, `dsh.session=${this.sessionId}`, `dsh.title=${this.title}`])
         if (hello.auto || origin === 'desktop') this.place(hello.term)
       }
+      this.watch()
       if (hello.cols) this.renderer.cols = hello.cols
       socket.on('close', () => this.conns.delete(socket))
       send(socket, { t: 'welcome', v: PROTOCOL, session: this.sessionId, origin, grace })
-      send(socket, { t: 'out', d: osc(this.status, this.title) + windowTitle(this.title) })
+      // An automatic mirror opens on a run that may have ended before it joined: report the run
+      // first, so hc counts the turn and Herdr's seen rules treat its done or error as news.
+      const missed = hello.auto && !hello.resumed && ['done', 'error'].includes(this.status.state)
+      send(socket, { t: 'out', d: (missed ? osc({ state: 'working' }, this.title) : '') + osc(this.status, this.title) + windowTitle(this.title) })
       const feed = inputParser({
         submit: text => this.submit(text),
         cancel: () => this.cancel(),
@@ -414,6 +485,7 @@ export function apply(ctx, config = {}) {
 
     dispose(reason) {
       this.waiter?.(null)
+      this.seenWatch?.child.kill()
       this.release(reason)
       bridges.delete(this.sessionId)
     }
@@ -643,6 +715,30 @@ export function apply(ctx, config = {}) {
     c.effect(() => () => { control.close(); sessions = null }, 'herdr-bridge: close control socket')
   })
 
+  // client.js reports which sessions a DSH window shows (an exact Connection Fetch route, the way
+  // DSH's own session export talks to its browser half; only the owner's browsers reach it).
+  ctx.inject(['connection'], c => {
+    c.connection.fetch.register({
+      path: '/api/herdr-bridge.viewing',
+      methods: ['POST'],
+      requestBody: 'buffered',
+      fetch: async request => {
+        const body = await request.json().catch(() => null)
+        if (typeof body?.client !== 'string' || !Array.isArray(body.sessions)) return new Response('bad request', { status: 400 })
+        setViewing(body.client, body.sessions.filter(id => typeof id === 'string'))
+        return new Response(null, { status: 204 })
+      },
+    })
+  })
+
+  // An archived session is hidden everywhere in DSH, so its terminals close too. DSH emits
+  // `domain/changed` once the archive set is durable, with the new set in its value (what its own
+  // workspace feed follows; the registry's getter can still hold the old set at that point).
+  ctx.on('domain/changed', change => {
+    if (change.domain !== 'workspace' || change.table !== '' || change.operation !== 'put') return
+    for (const id of change.value?.archivedSessionIds ?? []) bridges.get(id)?.dispose('the DSH session was archived')
+  })
+
   // /herdr: mirror this session into Herdr now and show its hc address.
   // The Plugins page shows this plugin's own settings page (client.js), not a generated one.
   ctx.inject(['settings'], c => { c.effect(() => c.settings.configure({ auto: false }, ctx.fiber), 'herdr-bridge: own settings page') })
@@ -698,9 +794,12 @@ export function apply(ctx, config = {}) {
     // Proxies keep their terminals and reconnect to the next instance within the grace period.
     for (const bridge of bridges.values()) {
       bridge.waiter?.(null)
+      bridge.seenWatch?.child.kill()
       for (const socket of bridge.conns.keys()) socket.destroy()
     }
     bridges.clear()
+    for (const v of viewers.values()) clearTimeout(v.timer)
+    viewers.clear()
   }, 'herdr-bridge: drop connections')
   log('loaded', Schema ? '(settings schema on)' : '(settings schema off: schemastery not found)', `herdrPlacement=${herdrPlacement()}`)
 }

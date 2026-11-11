@@ -62,8 +62,21 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 | `turn/end{completed \| max-tokens}` 后变为 idle | `done` |
 | `turn/end{aborted}` 后变为 idle | `idle` |
 | `turn/end{error \| blocked}` 后变为 idle | `error`，`msg` = 原因 |
+| 处于 `error`，在 Herdr 或 DSH 窗口里看过了出错的那一回合 | `idle` |
 | 审批或提问进行中 | `blocked`，`kind=permission \| question` |
 | `session/title` | `title` |
+
+**看过的报错变 idle**：Herdr 客户端把 `error` 一律当作 Needs you，不管看没看过（Herdr App `docs/labels.md`），而 DSH 报错后已经停下，没有在等人。所以会话处于 `error` 时，插件用 `hc events --terminal <地址>` 跟着它的终端：Herdr 客户端在人真正看到这个终端时写入 `herdr.seen=<turn>`，一旦它追上出错的那一回合（按 `turn` 事件判断，和 labels.md 的规则一致），插件就报 `idle`。报错那一刻仍然是 `error`，所以 `hc wait` 等它的父 Agent 照样会被唤醒。离开 `error` 时这个 `hc events` 进程就结束（除非会话正在 DSH 窗口里被看着，见下）。
+
+**DSH 窗口也算 Herdr 客户端**：在 DSH 里看过的回合，插件替你写 `herdr.seen`，就像 Herdr App 一样，所以 Herdr App 和 Perch 里看过的 Done 变成 Idle，看过的 error 按上一条变成 idle。
+- 判定“在看”（浏览器端 `client.js`）：会话在主视图（`ctx.sessions.list` 行的 `retainedBy.mainView > 0`，和 DSH 自己的完成提醒同一个依据），而且页面可见、窗口有焦点，即 labels.md 说的“真的在人面前”。
+- 上报通道：插件宿主端用 `ctx.connection.fetch.register` 注册精确路由 `POST /api/herdr-bridge.viewing`（DSH 自己的会话导出也是这样和浏览器端通信的；只有 owner 的浏览器能访问），浏览器端在主视图、可见性、焦点变化时上报 `{ client, sessions }`。在看的时候每 10 秒重复一次；宿主端 25 秒收不到就当作不再在看，窗口直接关掉也不会一直算着。
+- 写入：会话在看的时候，插件也用 `hc events` 跟着它的终端；进入视野时和在视野里结束一个回合时（`turn` 事件），写 `herdr.seen=<turn>`。按 labels.md：每回合只写一次、只升不降、标签缺失时也写；别处“标为未读”不会被一直开着的窗口顶回去，重新看一次才再写。
+- 多个窗口（Desktop、`dsh web`）有一个在看就算。反方向（在 Herdr 里看过，清掉 DSH 侧栏的完成提醒）不做：那个提醒只存在浏览器进程里。
+
+**自动映射时补报 `working`**：自动映射的终端是在回合开始后才连上的，回合可能在它连上之前就结束了（例如模型立刻报错）。这时终端的第一条 7501 报告直接是 `done` 或 `error`，hc 的 turn 不会增加，Herdr 的看过规则也就无从判断。所以新的自动映射终端如果连上时回合已经结束，插件先报 `working` 再报结果。
+
+**归档即关闭终端**：DSH 归档会话后，会话在 DSH 里就不可见了，所以插件把对应的终端都关掉（和会话关闭一样发 `bye`；自动映射的终端带 `--rm`，会随之消失）。归档写入持久存储后 DSH 会发出 `domain/changed`（`domain: 'workspace'`，`table: ''`），新的归档集合在事件的 `value.archivedSessionIds` 里；官方 workspace feed 也是这样监听的。取消归档后，会话下次运行时会重新映射。
 
 插件重载后，新实例不知道空闲会话的上一回合是怎么结束的。代理记得自己最后显示的 7501 状态，重连时放在 hello 的 `status` 里带回来；插件在还没亲眼看到这个会话变化之前，用它恢复 `done` 或 `error`（`working`、`blocked` 由实时事件决定，不靠记忆）。这是向后兼容的新增字段，所以没有升 `PROTOCOL`：旧代理不带它，旧插件忽略它。
 
@@ -118,18 +131,20 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 
 最近一次全部通过：2026-11-07，macOS，版本组合见 README 的“要求”。没有 CI，测试在本机手动执行。
 
-- `scripts/e2e.sh`（39 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
+- `scripts/e2e.sh`（41 项，隔离环境 + 模拟 LLM，不需要真实 Desktop）：
   - 新建会话、标题（终端标题、7501、标签）、`send --wait`、interrupt、模型报错。
   - 审批从 hc 回答、blocked 时 hc 拒绝普通 send、blocked 时 interrupt、提问。
   - `DSH_HC_TERMINAL`、skill、工具调用的渲染。
   - `ls`、`attach` 回放历史、多个终端同步显示、子目录会话保持原目录。
-  - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`。
+  - 运行中重载后地址不变并能跑完回合；重载前已完成、已报错的会话重载后保持 `done`、`error`；`herdr.seen` 追上出错的回合后变 `idle`，没追上则保持 `error`。
   - 插件加载时自动安装 hc template；用户自己写的 `dsh` template 不被覆盖。`install-template` 往 Herdr App 的程序表里加 DSH，保留已有条目。
-- `scripts/e2e-ui.sh`（14 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
+- `scripts/e2e-ui.sh`（21 项，ego-browser + 隔离 `dsh web` 作为 Desktop 替身）：
   - Desktop 发起的会话自动映射（映射前已开始流式输出的回复完整到达，按文件夹放进 Herdr App 的 space）、`/herdr`。
   - hc 回答审批后 Desktop 对话框被撤回；Desktop 回答后 hc 侧随之结束等待。
   - hc 回答提问后 Desktop 的提问被撤回。
   - 接管时自动映射的终端让位。
+  - 第一回合就报错的 Desktop 会话 turn 为 1，因为就在眼前报错，立刻被标为看过（`idle`）；在 Desktop 里归档后终端关闭。
+  - 在 DSH 窗口里打开报错的会话：写入 `herdr.seen`，变 `idle`；在视野里结束的回合被标为看过，视野外的不会，直到打开它。
 - 真实 DSH Desktop（真实模型，手动冒烟）：
   - 新建会话、渲染、运行中重载后地址不变并跑完回合。
   - `dsh-hc ls` 列出真实会话（含中文标题）。
