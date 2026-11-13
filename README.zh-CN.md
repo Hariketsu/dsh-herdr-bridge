@@ -16,7 +16,7 @@
 | | 测试过的版本 |
 |---|---|
 | DSH Desktop 或 `dsh web` | 0.2.2-rc.2 |
-| [herdr-core](https://github.com/herdrdev/herdr-core)（`hc`） | 0.1.20，需要在登录 shell 的 PATH 上 |
+| [herdr-core](https://github.com/herdrdev/herdr-core)（`hc`） | 0.1.21，需要在登录 shell 的 PATH 上 |
 | [Herdr App](https://github.com/herdrdev/herdr-app) | 0.1.15（可选） |
 
 在 macOS 上测试过。Windows 和 Linux 已实现，但没有测试。DSH 的插件接口仍在变化，升级 DSH 后可能需要更新插件。
