@@ -15,7 +15,7 @@
 
 | | 测试过的版本 |
 |---|---|
-| DSH Desktop 或 `dsh web` | 0.2.2-rc.1 |
+| DSH Desktop 或 `dsh web` | 0.2.2-rc.2 |
 | [herdr-core](https://github.com/herdrdev/herdr-core)（`hc`） | 0.1.20，需要在登录 shell 的 PATH 上 |
 | [Herdr App](https://github.com/herdrdev/herdr-app) | 0.1.15（可选） |
 

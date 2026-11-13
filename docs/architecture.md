@@ -116,7 +116,7 @@ hc 终端（每个映射出去的会话一个）               DSH Desktop Host 
 
 ## 依赖的 DSH 接口
 
-插件依赖 `sessionController`、`workspaceRegistry`、`commands`、`shellEnv`、`skills`、`agents` 等服务，以及 `agent/*`、`session/event`、`agent/assistant-stream`、`approval/request`、`user-questions/request` 等事件。这些不是稳定 API，只在 DSH 0.2.2-rc.1 上观测过，具体行为记在 [upstream-notes.md](upstream-notes.md)。DSH 升级后先跑一遍回归测试。
+插件依赖 `sessionController`、`workspaceRegistry`、`commands`、`shellEnv`、`skills`、`agents` 等服务，以及 `agent/*`、`session/event`、`agent/assistant-stream`、`approval/request`、`user-questions/request` 等事件。这些不是稳定 API，只在 DSH 0.2.2-rc.2 上观测过，具体行为记在 [upstream-notes.md](upstream-notes.md)。DSH 升级后先跑一遍回归测试。
 
 ## 否决的方案
 

@@ -15,7 +15,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plug
 
 | | Tested with |
 |---|---|
-| DSH Desktop or `dsh web` | 0.2.2-rc.1 |
+| DSH Desktop or `dsh web` | 0.2.2-rc.2 |
 | [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) | 0.1.20, on your login shell's PATH |
 | [Herdr App](https://github.com/herdrdev/herdr-app) | 0.1.15 (optional) |
 

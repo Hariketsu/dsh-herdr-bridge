@@ -4,7 +4,7 @@
 
 | 项目 | 观测时的版本 |
 |---|---|
-| DSH（Desktop / `dsh web`） | 0.2.2-rc.1 |
+| DSH（Desktop / `dsh web`） | 0.2.2-rc.2 |
 | herdr-core | 0.1.18 |
 | herdr-app | 0.1.13 |
 
@@ -34,6 +34,7 @@
 - 正常会话的 Agent 不会因为空闲被回收；Desktop 启动或打开会话时就可能 resume 它（比第一条 prompt 早约 6 秒）。
 - `sessionController.prompt` 会按需 resume Agent，所以给“冷”会话发消息不需要先加载它。
 - `sessionController.prompt` 的 `mode`：`queue` 放进下一回合（DSH 界面里直接按 Enter）；`steer` 在运行中回合的下一步交给模型，不中断回合（界面里的 Cmd/Ctrl+Enter 插话），Agent 空闲时直接开一个回合（`dsh-agent` 的 `steer()` 注释）。
+- 0.2.2-rc.2 起，`sessionController.prompt` 的 `content` 可以是空数组：只在会话空闲且最近一个回合失败时有效，作用是“继续生成”（Desktop 的“继续生成”按钮），对应的 user message 是 `source.kind === 'retry'`。含空白文本的 content 仍被拒绝。
 - `sessionController.list({}, signal)` 返回的条目里，标题在 `projections.values.title`。
 - `sessionController.page({ address: { kind: 'session', sessionId }, maxMessages }, signal)` 的 `records` 形如 `{ type: 'event', event }`，要解包后再渲染。
 - `ctx.agents.list()` / `get(id)` 返回存活的 Agent，`agent.status` 是 `idle` 或 `running`。
@@ -48,6 +49,7 @@
 
 - 两者都是 waterfall，每个请求只有一个最终应答方。Desktop 自带的应答方先注册，而且不调用 `next()`，所以插件必须用 `{ prepend: true }`。根 ctx 上的监听器能收到所有 Agent 的请求，`req.agent` 就是完整的 Agent。
 - **撤回机制**：转发器（`api/remotes`）把请求交给 gateway，gateway 监听 `request.signal`，abort 时调用 `cancelRemoteEvent`，撤回 UI 上的对话框。请求对象没有被冻结，链上传的是同一个对象，所以替换 `req.signal` 对下游生效。
+- 子 Agent（`header.origin === 'subagent'`，包括 AgentTeam 成员）不会发起审批或提问：它的审批策略固定为 `never`，需要审批的操作直接被拒（`subagent/child-agent.ts`）；`user-questions` 对 subagent 来源抛 `DELEGATED_CALLER`。嵌套多层也一样（0.2.2-rc.2）。所以审批和提问只来自顶层会话。
 - 没有 UI 客户端时，转发的审批会一直挂着等待；headless 没有应答方，会立刻得到 `unavailable`。
 - 审批的结果是 `'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'`；提问的回答是 `{ answers: [{ id, selected: [label…], custom? }] }`。
 - bash 工具要求必填参数 `description`。提权流程是：先被沙箱拒绝，同一轮里再带 `sandbox_permissions` 和 `justification` 重试同一条命令，这次才会触发审批。
@@ -55,6 +57,8 @@
 ## DSH 环境
 
 - shell-env 只允许注入 `DSH_*` 变量，变量描述不进入模型上下文；要让模型知道，用 `ctx.skills.register({ name, description, whenToUse, source: 'runtime', content })`。DSH 会自动发现 `~/.agents/skills`。
+- 0.2.2-rc.2 起 DSH 自己往 bash 环境里注入保留变量 `DSH_INSTALL_DIR`、`DSH_NODE_EXECUTABLE`，插件不能再注册同名变量。
+- 侧栏里的 Agent 终端（`dsh-experimental-terminal-bundle` 的持久终端，默认的 Desktop profile 里没有）不经过 shellEnv，只带 `DSH_SESSION_ID` 和工具配置里的变量，因此拿不到 `DSH_HC_TERMINAL`。
 - Desktop Host 进程用的是登录 shell 的 PATH（含 `~/.local/bin`）；Desktop 会话默认是 `workspace-write` 沙箱，`hc` 在其中可以正常使用。
 - 真实 DSH Agent 会读懂 `<hc reach=…>` 标记，并主动 `hc send` 回报给发起者。
 
