@@ -4,7 +4,7 @@
 
 | 项目 | 观测时的版本 |
 |---|---|
-| DSH（Desktop / `dsh web`） | 0.2.2-rc.2 |
+| DSH（Desktop / `dsh web`） | 0.2.2-rc.3 |
 | herdr-core | 0.1.18 |
 | herdr-app | 0.1.13 |
 
