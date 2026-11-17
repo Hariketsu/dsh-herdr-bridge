@@ -17,7 +17,7 @@
 - **这个 cordis 版本没有可选依赖**：顶层 `inject` 里声明的都是必需服务（对象写法的值是 intercept 配置，不是 required 标志），缺任何一个，插件就一直 pending（`dsh: warning: 1 entry did not activate`）。宿主服务一律在 `ctx.inject(['x'], c => …)` 子作用域里获取，清理用 `c.effect(() => () => cleanup, '说明')`。
 - web/Desktop 组合里有：`sessionController`、`workspaceRegistry`、`commands`、`shellEnv`、`skills`、`agents`、`approval`。headless 组合里没有 `sessionController` 和 `workspaceRegistry`。
 - Desktop 上 `process.execPath` 是 Electron（自带 Node 24），要用 `ELECTRON_RUN_AS_NODE=1` 运行；路径里有空格，需要加引号。
-- 修改 profile 的 `cordis.patch.yml` 里本插件的任意配置值，HMR 就会重组 profile，并替换磁盘上已变化的链接包。web UI 和 Desktop 会往这个文件里写自己的设置（例如关掉提示框时写入 `ui-settings-general`），所以用户在 UI 里改设置也会让插件重载。文件初始内容是 `[]`。
+- 修改 profile 的 `cordis.patch.yml` 里本插件的任意配置值，HMR 就会重组 profile，并替换磁盘上已变化的链接包。web UI 和 Desktop 会往这个文件里写自己的设置（例如关掉提示框时写入 `ui-settings-general`），所以用户在 UI 里改设置也会让插件重载。新建 profile 时文件内容是几行 `#` 注释加 `[]`（0.2.2-rc.3 实测），往里加条目要去掉这个 `[]`。
 - 装或卸 Desktop 插件要先完全退出 Desktop；`dsh --profile desktop --dump-config` 会被拒绝。
 - Desktop 的 Web API 需要 Electron 内部的凭据，外部程序无法直接调用。
 

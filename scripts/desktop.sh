@@ -21,8 +21,9 @@ token = f"{time.time_ns()}"
 lines = text.splitlines(keepends=True)
 start = next((i for i, l in enumerate(lines) if re.match(r"^- id: herdr-bridge\s*$", l)), None)
 if start is None:
-    if text.strip() in ("", "[]"):
-        text = ""
+    # A new profile's patch file is comments plus an empty list (`[]`); keep the comments, drop the list.
+    if "".join(l for l in lines if not l.lstrip().startswith("#")).strip() in ("", "[]"):
+        text = "".join(l for l in lines if l.strip() != "[]")
     elif not text.endswith("\n"):
         text += "\n"
     text += f"- id: herdr-bridge\n  config:\n    reloadToken: {token}\n"
