@@ -7,7 +7,7 @@
 import net from 'node:net'
 import { execFile, spawn } from 'node:child_process'
 import { accessSync, appendFileSync, chmodSync, constants, existsSync, mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { basename, delimiter, join, sep } from 'node:path'
+import { basename, delimiter, dirname, join, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -204,6 +204,17 @@ export function apply(ctx, config = {}) {
     join(homedir(), 'Applications/Herdr.app/Contents/MacOS/Herdr')].filter(file => file && existsSync(file))
   const herdrApp = args => new Promise(resolve => execFile(herdrAppCandidates[0] ?? 'herdr-app', args, { timeout: 5000 },
     (error, stdout) => resolve(error ? null : stdout)))
+  // Herdr App's automatic name for a folder: "~" at home, else the name of its repo's top folder or
+  // of the folder itself; so any ancestor's name up to home counts.
+  const automaticSpaceNames = folder => {
+    const names = []
+    const same = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
+    for (let f = folder; f && f !== dirname(f); f = dirname(f)) {
+      if (same(f, homedir())) return [...names, '~']
+      names.push(basename(f))
+    }
+    return names
+  }
   let naming = false
   async function nameDshSpace(cwd) {
     if (naming) return
@@ -215,7 +226,7 @@ export function apply(ctx, config = {}) {
         if (listed === null) return
         const space = JSON.parse(listed).spaces?.find(s => s.id === DSH_SPACE)
         if (space) {
-          const automatic = [space.folder, cwd].filter(Boolean).map(folder => basename(folder))
+          const automatic = [space.folder, cwd].filter(Boolean).flatMap(automaticSpaceNames)
           if (space.name !== 'DSH' && automatic.includes(space.name)) {
             const done = await herdrApp(['do', 'space.rename', JSON.stringify({ id: DSH_SPACE, name: 'DSH' })])
             log('herdr app: named the shared space DSH', done === null ? '(failed)' : '')
