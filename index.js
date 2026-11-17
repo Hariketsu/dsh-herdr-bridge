@@ -135,13 +135,31 @@ export function apply(ctx, config = {}) {
     : join(home, 'control.sock')
 
   // The launcher runs proxy.js with the Node that ships with DSH (this process's executable).
+  // On Windows that executable is Electron, which is a GUI-subsystem binary: started from a console
+  // it gets no usable stdin, so the proxy never receives `hc send` / `hc keys` input and a DSH
+  // session can be read but not driven. A console-subsystem node.exe has no such problem, so prefer
+  // one when it exists and keep the Electron path only as the fallback.
+  const launcherNode = () => {
+    if (process.platform !== 'win32' || !process.versions.electron) return null
+    const bundled = join(dirname(process.execPath), 'resources', 'runtime', 'primary-runtime',
+      'dependencies', 'node', 'bin', 'node.exe')
+    if (existsSync(bundled)) return bundled
+    const dirs = (process.env.PATH ?? process.env.Path ?? '').split(delimiter).filter(Boolean)
+    return findOnPath('node', dirs)
+  }
+
   const launcher = (() => {
     const proxy = fileURLToPath(new URL('./proxy.js', import.meta.url))
     const bin = join(home, 'bin')
     mkdirSync(bin, { recursive: true })
     if (process.platform === 'win32') {
       const file = join(bin, 'dsh-hc.cmd')
-      writeFileSync(file, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\nset "DSH_HERDR_SOCKET=${socketPath}"\r\nset "DSH_HERDR_LAUNCHER=${file}"\r\n"${process.execPath}" "${proxy}" %*\r\n`)
+      const node = launcherNode()
+      const run = node
+        ? `"${node}" "${proxy}" %*`
+        : `set ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" "${proxy}" %*`
+      writeFileSync(file, `@echo off\r\nset "DSH_HERDR_SOCKET=${socketPath}"\r\nset "DSH_HERDR_LAUNCHER=${file}"\r\n${run}\r\n`)
+      if (!node) log('no console node.exe found; the launcher falls back to Electron, which cannot take hc input on Windows')
       return file
     }
     const q = s => `'${s.replace(/'/g, `'\\''`)}'`
